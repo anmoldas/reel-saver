@@ -1,6 +1,6 @@
 # reel saver
 
-tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways. every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
+tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways, sorted into [topics you pick](#topics). every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
 
 <!-- TODO screenshot: the sheet (Places / Ideas / Mentions tabs) next to the phone notification "Saved place: …" -->
 
@@ -96,9 +96,12 @@ everything an idea recommends gets one row in **Mentions**: a shopping and to-tr
 
 ### topics
 
-the **Topics** tab lists the idea topics (Travel tips, Clothing, Career, AI, Video editing, Journaling, Organization to start). Gemini must pick one of them or "Other".
+the **Topics** tab is the list of topics your ideas get sorted into. Gemini must pick one of them or "Other" ("Other" is always there, you don't need to add it).
 
-- **to add a topic**, add a row to the Topics tab. the next save uses it; no redeploy.
+**make it yours.** it starts with my topics (Travel tips, Clothing, Career, AI, Video editing, Journaling, Organization), which probably aren't yours. edit the tab to match what you actually save, e.g. Fitness, Skincare, Budgeting, Home. no code and no redeploy: the next save uses the new list.
+
+- **to add, rename or remove a topic**, add, edit or delete its row. if you clear the tab completely it goes back to the starter list, so type your own in instead.
+- **ideas you already saved keep their old topic.** after renaming or removing one, use Edit → Find and replace in the Ideas and Mentions tabs to move old rows over.
 - **after adding a topic**, run `applyNewTopics` from the Apps Script editor to move ideas already saved under "Other" whose `suggested_topic` matches it. their Mentions rows follow.
 - **to find new topics**, filter Ideas to `topic = Other` now and then. the `suggested_topic` column says what Gemini would have called each one. if the same suggestion keeps appearing, add it to Topics.
 
