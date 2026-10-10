@@ -37,6 +37,29 @@ describe('resolvePostUrl', () => {
     });
   });
 
+  it('looks up the username for TikTok data-export links', async () => {
+    const seen: string[] = [];
+    const fetchMock = (async (u: string) => {
+      seen.push(String(u));
+      return Response.json({ author_unique_id: 'chef.joe' });
+    }) as typeof fetch;
+    await expect(resolvePostUrl('https://www.tiktokv.com/share/video/7300000000000000000/', fetchMock)).resolves.toEqual({
+      url: 'https://www.tiktok.com/@chef.joe/video/7300000000000000000',
+      platform: 'tiktok',
+    });
+    expect(seen[0]).toMatch(/^https:\/\/www\.tiktok\.com\/oembed\?url=/);
+  });
+
+  it('says a data-export link is gone when TikTok has no author for it', async () => {
+    const fetchMock = (async () => new Response('{}', { status: 400 })) as typeof fetch;
+    await expect(resolvePostUrl('https://www.tiktok.com/@/video/1', fetchMock)).rejects.toThrow(/private or deleted/);
+  });
+
+  it('does not trust an odd username from TikTok', async () => {
+    const fetchMock = (async () => Response.json({ author_unique_id: 'x/../../evil?a=' })) as typeof fetch;
+    await expect(resolvePostUrl('https://www.tiktok.com/@/video/1', fetchMock)).rejects.toThrow(/private or deleted/);
+  });
+
   it('reads the real post out of an Instagram login redirect', async () => {
     const fetchMock = (async () =>
       redirect('https://www.instagram.com/accounts/login/?next=%2Freel%2FREAL1%2F%3Figsh%3Dx')) as typeof fetch;

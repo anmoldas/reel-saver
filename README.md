@@ -126,6 +126,16 @@ places saved before this list existed have free-text categories. run `recategori
 
 if your sheet has the older `Saves` tab, paste the new `Code.gs`, pick `migrateSaves` in the function dropdown and click Run once. rows move to the new tabs and the old tab is kept as `Saves (old)`. then deploy a new version (Deploy → Manage deployments → edit → Version: New version) so the web app uses the new code.
 
+### importing old TikTok favorites
+
+request your data in TikTok (Settings → Account → Download your data, format **JSON**), unzip it, then:
+
+```sh
+node scripts/import-tiktok.mjs user_data_tiktok.json --url https://YOUR-APP.vercel.app --since 2025-01-01
+```
+
+it sends your Favorites newest first, 30 seconds apart, and each row keeps the date you favorited it. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.tiktok-import.json`). the SECRET is read from `.env.local`. at ~$0.003–0.005 a TikTok, a few hundred fit in Apify's free $5 a month; for more, spread runs across months.
+
 ## what it costs
 
 for a few saves a day, $0. rough numbers per save:

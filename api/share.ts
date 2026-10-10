@@ -31,7 +31,7 @@ export function GET(): Response {
   return json({ ok: true, service: 'reel-saver' });
 }
 
-/** POST { url, secret } from the iOS Shortcut. Always answers with { ok, message }. */
+/** POST { url, secret, saved_at? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
 export async function POST(request: Request): Promise<Response> {
   try {
     return await handle(request);
@@ -55,7 +55,9 @@ async function handle(request: Request): Promise<Response> {
 
   const raw = extractUrl(String(body.url ?? body.text ?? ''));
   if (!raw) return json({ ok: false, message: 'No link found in what was shared' }, 400);
-  const savedAt = new Date().toISOString();
+  // Imports pass the original save date (e.g. from a TikTok data export); the Shortcut does not.
+  const givenDate = typeof body.saved_at === 'string' ? new Date(body.saved_at) : null;
+  const savedAt = (givenDate && !isNaN(givenDate.getTime()) ? givenDate : new Date()).toISOString();
 
   // Resolve short links so duplicates are detected on one canonical URL.
   let resolved;

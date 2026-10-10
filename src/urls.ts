@@ -13,6 +13,8 @@ export function detectPlatform(u: URL): Platform | null {
   const host = u.hostname.toLowerCase();
   if (host === 'instagram.com' || host.endsWith('.instagram.com') || host === 'instagr.am') return 'instagram';
   if (host === 'tiktok.com' || host.endsWith('.tiktok.com')) return 'tiktok';
+  // TikTok's data export links to www.tiktokv.com/share/video/ID.
+  if (host === 'tiktokv.com' || host.endsWith('.tiktokv.com')) return 'tiktok';
   return null;
 }
 
@@ -46,6 +48,28 @@ export function canonicalize(u: URL): string | null {
   return null;
 }
 
+/**
+ * The video ID of a TikTok link that has no username in it, else null:
+ * /share/video/ID (data export, via tiktokv.com) and /@/video/ID (where that redirects).
+ */
+export function tiktokIdWithoutUser(u: URL): string | null {
+  if (detectPlatform(u) !== 'tiktok') return null;
+  const m = u.pathname.match(/^\/(?:share|@)\/(video|photo)\/(\d+)\/?$/);
+  return m ? m[2] : null;
+}
+
+/** Asks TikTok's oEmbed endpoint who posted a video, so the link gets its real username. */
+async function tiktokUrlFromId(id: string, fetchImpl: typeof fetch): Promise<string> {
+  const res = await fetchImpl(
+    `https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/@/video/${id}`)}`,
+  );
+  const data: any = res.ok ? await res.json().catch(() => null) : null;
+  const user = typeof data?.author_unique_id === 'string' ? data.author_unique_id : '';
+  // TikTok usernames are letters, digits, "_" and "."; anything else is not trusted into the URL.
+  if (!/^[A-Za-z0-9._]{1,64}$/.test(user)) throw new Error('Post not found. It may be private or deleted');
+  return `https://www.tiktok.com/@${user}/video/${id}`;
+}
+
 /** Follow redirects by hand until we land on a recognisable post URL. */
 export async function resolvePostUrl(
   raw: string,
@@ -60,6 +84,9 @@ export async function resolvePostUrl(
   for (let hop = 0; hop < 6; hop++) {
     const platform = detectPlatform(current);
     if (!platform) throw new Error(`Only Instagram and TikTok links are supported (got ${current.hostname})`);
+
+    const bareId = tiktokIdWithoutUser(current);
+    if (bareId) return { url: await tiktokUrlFromId(bareId, fetchImpl), platform };
 
     const canonical = canonicalize(current);
     if (canonical) return { url: canonical, platform };
