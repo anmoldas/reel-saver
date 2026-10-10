@@ -117,7 +117,7 @@ if your sheet has the older `Saves` tab, paste the new `Code.gs`, pick `migrateS
 bring in your past TikTok favorites and Instagram saved posts. three things to know first:
 
 - **it runs on your computer**, not online. your computer has to stay on, awake and connected the whole time. if it sleeps or you close the window, it just stops; run the same command again and it picks up where it left off.
-- **it's slow on purpose.** it sends one post at a time and waits for each to finish, so figure on roughly a minute per post: 100 posts is an hour or two, 500 is most of a day. plug in your laptop.
+- **it's slow on purpose.** it sends one post at a time and waits for each to finish, so figure on 30 seconds to a minute per post: 100 posts takes one to two hours, 500 takes five to nine. plug in your laptop.
 - **it uses the same $5 of Apify credit as your everyday saves.** that's about 500 TikToks or 1,500 Instagram posts a month in total (see [what it costs](#what-it-costs)). if an import uses it all up, sharing new reels fails until next month. so leave some room: import a few hundred at a time with `--limit`, and do the rest next month. you can see what's left on apify.com under **Billing**.
 
 ask each app for your data in **JSON** format:

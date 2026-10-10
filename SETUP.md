@@ -133,7 +133,7 @@ Finish with a short tour in plain words:
 Ask whether they want their past TikTok favorites and Instagram saved posts in the sheet too. Before they decide, tell them plainly:
 
 - **It runs on this computer.** It has to stay on, awake, plugged in and online, with this Claude Code window open, until it finishes. If it stops (sleep, lid closed, window closed), running the same command again continues where it left off.
-- **It takes a while:** roughly a minute per post, so 100 posts is an hour or two and 500 is most of a day. A good time is when they won't need the computer, or in batches.
+- **It takes a while:** 30 seconds to a minute per post, so 100 posts takes one to two hours and 500 takes five to nine. A good time is when they won't need the computer, or in batches.
 - **It shares the $5 monthly Apify credit with their everyday saves.** About 500 TikToks or 1,500 Instagram posts a month in total. If the import uses it up, new saves from their phone fail until next month.
 
 If yes, have them request their data (it takes minutes to a day, so they can do this first and come back):
