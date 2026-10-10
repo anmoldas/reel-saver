@@ -4,13 +4,13 @@
 >
 > *Set up Reel Saver for me by following https://raw.githubusercontent.com/moneymolz/reel-saver/main/SETUP.md*
 >
-> It takes about 30–45 minutes, mostly creating free accounts. You'll need a computer (Mac or Windows) and an iPhone.
+> It takes about 45 minutes, mostly creating free accounts. You'll need a computer (Mac or Windows), an iPhone and a Google account. Along the way it has you sign up for **Apify**, **Google AI Studio** (Gemini) and **Vercel**, all free with no card, plus optionally **Google Cloud** for exact map pins, which asks for a card but stays free for normal use. You don't need any of these beforehand.
 
 ---
 
 ## Instructions for Claude Code
 
-You are setting up **Reel Saver** for someone who is probably not a developer. When it's done, they tap Share on an Instagram reel or TikTok, and a row appears in their Google Sheet: a **place** (with a Maps link), a **recipe** (ingredients and steps), or an **idea** (tips, with key takeaways and the products mentioned).
+You are setting up **Reel Saver** for someone who is probably not a developer. When it's done, they tap Share on an Instagram reel or TikTok, and a row appears in their Google Sheet: a **place** (with a Maps link), a **recipe** (ingredients and steps), or an **idea** (tips, with key takeaways). Products, apps and brands that creators recommend also go on a **Mentions** list. Posts that are just for fun are skipped.
 
 How it works: an iOS Shortcut sends the link to a small Vercel function. The function fetches the post with Apify, reads it (and the video when needed) with Gemini, optionally looks up places with Google Places, and writes rows to their Google Sheet through an Apps Script web app.
 
@@ -52,7 +52,7 @@ Open `.env.local` for them in a text editor (`open -e .env.local` on Mac, `notep
 3. Copy the **Personal API token**. It starts with `apify_api_`.
 4. Paste it after `APIFY_TOKEN=` in the settings file and save.
 
-The free plan includes $5 of credit a month. A save costs a fraction of a cent, so that covers hundreds of saves a month.
+The free plan includes $5 of credit a month. A save costs between a third of a cent (Instagram) and a cent (TikTok), so that covers about 500 TikToks or 1,500 Instagram posts a month.
 
 ### Step 3: Gemini (reads the post and watches the video)
 
