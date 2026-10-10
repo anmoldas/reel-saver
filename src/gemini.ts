@@ -89,7 +89,7 @@ Classify what the post is worth saving for:
   - "topic": one of ${topics.map((t) => `"${t}"`).join(', ')}. Travel advice without specific named spots is "Travel tips".
   - "suggested_topic": only when the topic is "${OTHER}", a short name for the topic it would need (e.g. "Fitness"); otherwise empty.
   - "takeaways": the 3 to 5 most useful points the post actually makes, each a short standalone sentence.
-  - "mentioned": every specific product, app, tool, brand, store, book, show, course or person the post names or recommends. For each:
+  - "mentioned": the specific products, apps, tools, brands, stores, books, shows, courses or people the post recommends, reviews or shows how to use: things the viewer could buy, use, watch, read or follow. Leave out names that are only part of the creator's story or background, such as their employers, schools, clients or cities they lived in, and anything mentioned only in passing or criticised. Empty is fine. For each:
     - "name": what it is called, as specifically as the post says it (e.g. "Tea Tree & Rosemary Shampoo", "CapCut").
     - "kind": one of ${MENTION_KINDS.map((k) => `"${k}"`).join(', ')}.
     - "brand": the brand or maker when it is not already part of the name; otherwise empty.

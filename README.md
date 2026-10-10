@@ -97,12 +97,12 @@ one tab per kind of save. columns are matched by name, so you can reorder them o
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
 - place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
-- `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it names.
+- `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
 
 ### mentions
 
-every thing an idea names gets its own row in **Mentions**: a shopping and to-try list across all your saves.
+every thing an idea recommends gets its own row in **Mentions**: a shopping and to-try list across all your saves.
 
 - `kind` is one of product, app/tool, brand, store, book, show/movie, course, person. `why` is one line on why it was recommended; `price` is filled only when the video says one.
 - `shop_link` is a Google Shopping search for products and brands, and a web search for everything else.
