@@ -67,7 +67,7 @@ async function runSteps(
       const file = await uploadVideo(env, post.videoUrl);
       try {
         const fromVideo = await parseVideo(env, lists, post, file);
-        if (fromVideo.items.length) result = fromVideo;
+        if (fromVideo.items.length || fromVideo.just_for_fun) result = fromVideo;
       } finally {
         await deleteVideo(env, file.name);
       }
@@ -76,6 +76,10 @@ async function runSteps(
       if (!result?.items.length) throw err;
       log(url, `video fallback failed, keeping caption parse: ${errorMessage(err)}`);
     }
+  }
+  if (result?.just_for_fun) {
+    log(url, 'just for fun, nothing saved');
+    return { ok: true, skipped: true, message: 'Skipped: just for fun, nothing to save' };
   }
   if (!result?.items.length) throw new Error('Found nothing to save in this post');
 

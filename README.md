@@ -80,6 +80,7 @@ in instagram or tiktok: Share → Save to Sheet (in tiktok it's under Share → 
 - **caption first for places and recipes.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
 - **ideas always watch the video.** tips and advice are usually spoken, and the caption is just a teaser, so any post read as an idea is re-read with the video.
 - **several places in one post** become one row each.
+- **just for fun is skipped.** jokes, memes, skits, pets and vlogs with nothing to visit, cook, buy or learn get "Skipped: just for fun" and no row. if the caption can't tell, it watches the video first. a funny post that still names a place, product or tip is saved.
 - **duplicates**: links are normalised (`instagram.com/share/...`, `vm.tiktok.com/...`, `?igsh=` all collapse to one URL). if a non-failed row already exists you get "Already saved: X" and nothing runs.
 - **thumbnails** are copied to a `Reel Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
 
@@ -96,12 +97,12 @@ one tab per kind of save. columns are matched by name, so you can reorder them o
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
 - place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
-- `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it names.
+- `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
 
 ### mentions
 
-every thing an idea names gets its own row in **Mentions**: a shopping and to-try list across all your saves.
+every thing an idea recommends gets its own row in **Mentions**: a shopping and to-try list across all your saves.
 
 - `kind` is one of product, app/tool, brand, store, book, show/movie, course, person. `why` is one line on why it was recommended; `price` is filled only when the video says one.
 - `shop_link` is a Google Shopping search for products and brands, and a web search for everything else.

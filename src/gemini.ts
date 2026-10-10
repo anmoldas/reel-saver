@@ -69,8 +69,9 @@ export function responseSchema({ topics, placeTypes }: Lists) {
         },
       },
       needs_video: { type: 'BOOLEAN' },
+      just_for_fun: { type: 'BOOLEAN' },
     },
-    required: ['items', 'needs_video'],
+    required: ['items', 'needs_video', 'just_for_fun'],
   };
 }
 
@@ -88,7 +89,7 @@ Classify what the post is worth saving for:
   - "topic": one of ${topics.map((t) => `"${t}"`).join(', ')}. Travel advice without specific named spots is "Travel tips".
   - "suggested_topic": only when the topic is "${OTHER}", a short name for the topic it would need (e.g. "Fitness"); otherwise empty.
   - "takeaways": the 3 to 5 most useful points the post actually makes, each a short standalone sentence.
-  - "mentioned": every specific product, app, tool, brand, store, book, show, course or person the post names or recommends. For each:
+  - "mentioned": the specific products, apps, tools, brands, stores, books, shows, courses or people the post recommends, reviews or shows how to use: things the viewer could buy, use, watch, read or follow. Leave out names that are only part of the creator's story or background, such as their employers, schools, clients or cities they lived in, and anything mentioned only in passing or criticised. Empty is fine. For each:
     - "name": what it is called, as specifically as the post says it (e.g. "Tea Tree & Rosemary Shampoo", "CapCut").
     - "kind": one of ${MENTION_KINDS.map((k) => `"${k}"`).join(', ')}.
     - "brand": the brand or maker when it is not already part of the name; otherwise empty.
@@ -102,6 +103,7 @@ Rules:
 - "confidence" is 0 to 1: how sure you are that the item is complete and correct.
 - Never invent ingredients, steps, places, cities or takeaways. If something is missing, leave it empty and lower the confidence.
 - Set "needs_video" to true when the text alone is not enough, for example a recipe whose steps are only spoken in the video, a place whose name or city is only shown on screen, or tips that are only said out loud.
+- Set "just_for_fun" to true, with no items, when the post is only entertainment: jokes, skits, memes, relatable humour, pranks, dances, reactions, pets, or a personal vlog with nothing someone could visit, cook, buy or learn. A funny post that still names a real place, product or useful tip is not just for fun: return those items. If the text alone cannot tell, set "needs_video" instead.
 - Write in English.`;
 }
 
@@ -159,6 +161,7 @@ export function parseVideo(
 /** Why the caption-only result is not good enough, or null if it is. */
 export function needsVideo(result: ParseResult, threshold: number): string | null {
   if (result.needs_video) return 'model asked for the video';
+  if (result.just_for_fun) return null; // nothing to save, so no need to watch it
   if (result.items.length === 0) return 'nothing found in the caption';
   for (const item of result.items) {
     if (item.confidence < threshold) return `low confidence (${item.confidence})`;
@@ -242,7 +245,7 @@ export function normalizeParse(
     if (!item.title) item.title = item.place?.name ?? '';
     return item.title ? [item] : [];
   });
-  return { items, needs_video: raw?.needs_video === true };
+  return { items, needs_video: raw?.needs_video === true, just_for_fun: raw?.just_for_fun === true && items.length === 0 };
 }
 
 // ---- video upload (Gemini Files API) ----

@@ -25,6 +25,8 @@ export interface PipelineParams {
 export interface PipelineResult {
   ok: boolean;
   message: string;
+  /** True when the post was only entertainment and no row was written. */
+  skipped?: boolean;
 }
 
 /** What we keep from the scraper. */
@@ -60,6 +62,8 @@ export interface ParseResult {
   items: ParsedItem[];
   /** The model's own judgement that the caption was not enough. */
   needs_video: boolean;
+  /** Only entertainment, nothing worth saving. Never true when there are items. */
+  just_for_fun: boolean;
 }
 
 export interface PlaceMatch {
