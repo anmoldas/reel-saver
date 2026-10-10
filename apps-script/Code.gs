@@ -1,5 +1,5 @@
 /**
- * Reel Saver: Sheet write endpoint.
+ * Save Faves: Sheet write endpoint.
  *
  * Setup: Extensions > Apps Script in your Sheet, paste this file, then
  * Project Settings > Script properties > add SECRET (same value as the Vercel SECRET).
@@ -57,7 +57,7 @@ const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 const SCRIPT_VERSION = 4;
 
 function doGet() {
-  return json_({ ok: true, service: 'reel-saver sheet', version: SCRIPT_VERSION });
+  return json_({ ok: true, service: 'save-faves sheet', version: SCRIPT_VERSION });
 }
 
 function doPost(e) {

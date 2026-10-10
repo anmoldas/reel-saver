@@ -334,7 +334,7 @@ export async function uploadVideo(env: Env, videoUrl: string): Promise<{ name: s
       'X-Goog-Upload-Header-Content-Type': mimeType,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ file: { display_name: 'reel-saver' } }),
+    body: JSON.stringify({ file: { display_name: 'save-faves' } }),
   });
   const uploadUrl = start.headers.get('x-goog-upload-url');
   if (!start.ok || !uploadUrl) throw new Error(`Gemini upload start failed (${start.status})`);

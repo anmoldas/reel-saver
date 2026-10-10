@@ -1,8 +1,8 @@
-# Reel Saver: setup guide for Claude Code
+# Save Faves: setup guide for Claude Code
 
 > **If you're a person reading this:** you don't need to follow these steps yourself. Open Claude Code in an empty folder and say:
 >
-> *Set up Reel Saver for me by following https://raw.githubusercontent.com/moneymolz/reel-saver/main/SETUP.md*
+> *Set up Save Faves for me by following https://raw.githubusercontent.com/moneymolz/save-faves/main/SETUP.md*
 >
 > It takes about 45 minutes, mostly creating free accounts. You'll need a computer (Mac or Windows), an iPhone and a Google account. Along the way it has you sign up for **Apify**, **Google AI Studio** (Gemini) and **Vercel**, all free with no card, plus optionally **Google Cloud** for exact map pins, which asks for a card but stays free for normal use. You don't need any of these beforehand.
 
@@ -10,7 +10,7 @@
 
 ## Instructions for Claude Code
 
-You are setting up **Reel Saver** for someone who is probably not a developer. When it's done, they tap Share on an Instagram reel or TikTok, and a row appears in their Google Sheet: a **place** (with a Maps link), a **recipe** (ingredients and steps), or an **idea** (tips, with key takeaways). Products, apps and brands that creators recommend also go on a **Mentions** list. Posts that are just for fun are skipped.
+You are setting up **Save Faves** for someone who is probably not a developer. When it's done, they tap Share on an Instagram reel or TikTok, and a row appears in their Google Sheet: a **place** (with a Maps link), a **recipe** (ingredients and steps), or an **idea** (tips, with key takeaways). Products, apps and brands that creators recommend also go on a **Mentions** list. Posts that are just for fun are skipped.
 
 How it works: an iOS Shortcut sends the link to a small Vercel function. The function fetches the post with Apify, reads it (and the video when needed) with Gemini, optionally looks up places with Google Places, and writes rows to their Google Sheet through an Apps Script web app.
 
@@ -29,13 +29,13 @@ Check Node.js 20 or newer is installed: `node -v`. If it's missing or old, ask t
 Download the code into the current folder, without needing git:
 
 ```sh
-curl -L https://github.com/moneymolz/reel-saver/archive/refs/heads/main.tar.gz | tar xz
-cd reel-saver-main
+curl -L https://github.com/moneymolz/save-faves/archive/refs/heads/main.tar.gz | tar xz
+cd save-faves-main
 npm install
 npm test
 ```
 
-On Windows, if `tar` or `curl` fail, download https://github.com/moneymolz/reel-saver/archive/refs/heads/main.zip, unzip it, and `cd` into it. All tests should pass. Every later command runs inside this folder.
+On Windows, if `tar` or `curl` fail, download https://github.com/moneymolz/save-faves/archive/refs/heads/main.zip, unzip it, and `cd` into it. All tests should pass. Every later command runs inside this folder.
 
 Then create the settings file. This also generates their private SECRET:
 
@@ -66,7 +66,7 @@ Run `node scripts/setup.mjs check`. Apify and Gemini should show ✓ (the Sheet 
 
 ### Step 4: The Google Sheet and its Apps Script
 
-1. Go to https://sheets.new to make a blank Sheet, and give it a name like "Reel Saver".
+1. Go to https://sheets.new to make a blank Sheet, and give it a name like "Save Faves".
 2. Click **Extensions → Apps Script**. A code editor opens in a new tab.
 3. Copy the script to their clipboard: `pbcopy < apps-script/Code.gs` on Mac, or `Get-Content apps-script\Code.gs -Raw | Set-Clipboard` in Windows PowerShell. In the editor, they select everything in `Code.gs`, paste over it, and click the **save** icon.
 4. Run `node scripts/setup.mjs copy SECRET` to copy their secret. In Apps Script: **gear icon (Project Settings)** → scroll to **Script properties** → **Add script property** → Property `SECRET`, Value: paste → **Save script properties**.
@@ -81,7 +81,7 @@ Run `node scripts/setup.mjs check`. All required items should be ✓. If the She
 Without this, places still save with a Google Maps search link, but without an address, coordinates or an exact pin. Ask whether they want it. It needs a card on a Google Cloud account, though the first 5,000 lookups each month are free.
 
 If yes:
-1. https://console.cloud.google.com → project picker at the top → **New project** (e.g. "reel-saver") → select it.
+1. https://console.cloud.google.com → project picker at the top → **New project** (e.g. "save-faves") → select it.
 2. Search the top bar for **Places API (New)** → **Enable**. Add a billing account when asked.
 3. **APIs & Services → Credentials → Create credentials → API key**. Then click the key → **API restrictions → Restrict key → Places API (New)** → **Save**.
 4. Paste it after `PLACES_API_KEY=` and save. Run `check` again.
@@ -90,7 +90,7 @@ If yes:
 
 1. Ask them to sign up at https://vercel.com. The free **Hobby** plan is for personal use, which this is.
 2. Run `npx vercel login` and have them finish the login in the browser window that opens.
-3. Create the project and link this folder: `npx vercel link --yes --project reel-saver`. If the name is taken, add something to it, like `reel-saver-<their initials>`.
+3. Create the project and link this folder: `npx vercel link --yes --project save-faves`. If the name is taken, add something to it, like `save-faves-<their initials>`.
 4. Send the keys: `node scripts/setup.mjs push`.
 5. Deploy: `npx vercel deploy --prod --yes`. The output lists two addresses: a long one unique to this deploy, and a short production one (`https://<project>.vercel.app`, after "Aliased"). Use the **short** one as their **app address**: it stays the same across deploys, and Vercel's default protection blocks the long one. It's fine to show the address, since it's useless without the secret. If the output doesn't show it, find it under the project's **Domains** in the Vercel dashboard.
 6. Test it: `node scripts/setup.mjs test https://<their-app>.vercel.app`. It should report the endpoint is live and that a stub row was written. Ask them to check the **Ideas** tab for the "Stub row" and delete it.
@@ -157,7 +157,7 @@ Then:
 
 ## Troubleshooting (for Claude Code)
 
-To see what happened on a save, run `npx vercel logs <their-app-url>`. Every step logs a line starting with `[reel-saver]`.
+To see what happened on a save, run `npx vercel logs <their-app-url>`. Every step logs a line starting with `[save-faves]`.
 
 | What they see | Cause | Fix |
 |---|---|---|

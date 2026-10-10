@@ -1,4 +1,4 @@
-# reel saver
+# save faves
 
 tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways, sorted into [topics you pick](#topics). ideas on the same subject are combined into [guides](#guides), so ten videos about one trip become one list. every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
 
@@ -26,7 +26,7 @@ so it's **$0 to run** for normal use.
 
 open [Claude Code](https://claude.com/claude-code) in an empty folder and say:
 
-> Set up Reel Saver for me by following https://raw.githubusercontent.com/moneymolz/reel-saver/main/SETUP.md
+> Set up Save Faves for me by following https://raw.githubusercontent.com/moneymolz/save-faves/main/SETUP.md
 
 it walks you through each account one step at a time, keeps your keys in a file on your computer instead of the chat, puts the app online, and tests everything. at the end it can also bring in the tiktoks and instagram posts you've already saved. prefer doing it yourself? see [doing it by hand](#doing-it-by-hand).
 
@@ -210,7 +210,7 @@ curl -X POST https://<project>.vercel.app/api/share \
   -d '{"url":"https://www.instagram.com/reel/TEST1/","secret":"YOUR_SECRET","stub":true}'
 ```
 
-then a real one (drop `"stub":true` and use a real reel or tiktok link). logs are under the project's **Logs** tab in Vercel. every step prints a `[reel-saver]` line.
+then a real one (drop `"stub":true` and use a real reel or tiktok link). logs are under the project's **Logs** tab in Vercel. every step prints a `[save-faves]` line.
 
 ### 4. iOS shortcut
 

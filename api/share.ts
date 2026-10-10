@@ -21,7 +21,7 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 export function GET(): Response {
-  return json({ ok: true, service: 'reel-saver' });
+  return json({ ok: true, service: 'save-faves' });
 }
 
 /** POST { url, secret, saved_at?, wait?, note?, guides? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
@@ -29,7 +29,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     return await handle(request);
   } catch (err) {
-    console.log(`[reel-saver] request failed: ${errorMessage(err)}`);
+    console.log(`[save-faves] request failed: ${errorMessage(err)}`);
     return json({ ok: false, message: `Error: ${errorMessage(err)}` }, 500);
   }
 }
@@ -69,7 +69,7 @@ async function handle(request: Request): Promise<Response> {
     if (existing.exists) return json({ ok: true, duplicate: true, message: `Already saved: ${existing.title ?? url}` });
     lists = listsFrom(existing.topics, existing.place_types, existing.guides);
   } catch (err) {
-    console.log(`[reel-saver] duplicate check failed, continuing: ${errorMessage(err)}`);
+    console.log(`[save-faves] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
 
   // Build step 2: `"stub": true` writes a placeholder row without calling Apify or Gemini.
