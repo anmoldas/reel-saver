@@ -86,7 +86,7 @@ async function main() {
 
   const secret = readSecret();
   const endpoint = `${opts.url.replace(/\/+$/, '')}/api/share`;
-  const counts = { saved: 0, duplicate: 0, failed: 0 };
+  const counts = { saved: 0, duplicate: 0, skipped: 0, failed: 0 };
 
   for (const [i, f] of batch.entries()) {
     let result;
@@ -103,7 +103,7 @@ async function main() {
     }
 
     const message = String(result.message ?? '');
-    const kind = result.duplicate ? 'duplicate' : result.ok ? 'saved' : 'failed';
+    const kind = result.duplicate ? 'duplicate' : result.skipped ? 'skipped' : result.ok ? 'saved' : 'failed';
     counts[kind]++;
     state[f.link] = { done: result.ok === true || FINAL.test(message), message, at: new Date().toISOString() };
     writeFileSync(STATE, JSON.stringify(state, null, 1));
@@ -111,7 +111,7 @@ async function main() {
 
     if (i < batch.length - 1) await new Promise((r) => setTimeout(r, opts.delay * 1000));
   }
-  console.log(`Done: ${counts.saved} sent, ${counts.duplicate} already saved, ${counts.failed} failed.`);
+  console.log(`Done: ${counts.saved} sent, ${counts.duplicate} already saved, ${counts.skipped} skipped as just for fun, ${counts.failed} failed.`);
   if (counts.failed) console.log('Run the same command again to retry the failed ones.');
 }
 

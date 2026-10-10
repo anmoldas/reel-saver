@@ -65,6 +65,40 @@ describe('runPipeline', () => {
     expect(rows[0]).toMatchObject({ type: 'place', title: 'Veracruz', city: 'Austin', place_id: 'PID', lat: 40, lng: -73, creator: '@chef' });
   });
 
+  it('skips a just-for-fun post without watching the video or writing a row', async () => {
+    const svc = fakeServices({ caption: 'when your cat hears the treat bag 😂', captionParse: { needs_video: false, just_for_fun: true, items: [] } });
+    const result = await runPipeline(env, params);
+    expect(result).toEqual({ ok: true, skipped: true, message: 'Skipped: just for fun, nothing to save' });
+    expect(svc.geminiCalls()).toBe(1);
+    expect(svc.sheetWrites).toEqual([]);
+  });
+
+  it('watches the video before deciding a post is just for fun', async () => {
+    const svc = fakeServices({
+      caption: '😂😂',
+      captionParse: { needs_video: true, just_for_fun: false, items: [] },
+      videoParse: { needs_video: false, just_for_fun: true, items: [] },
+    });
+    const result = await runPipeline(env, params);
+    expect(result.skipped).toBe(true);
+    expect(svc.geminiCalls()).toBe(2);
+    expect(svc.sheetWrites).toEqual([]);
+  });
+
+  it('keeps items even if the model also says just for fun', async () => {
+    const svc = fakeServices({
+      caption: 'funny but go to Veracruz in Austin',
+      captionParse: {
+        needs_video: false,
+        just_for_fun: true,
+        items: [{ type: 'place', title: 'Veracruz', summary: 'tacos', confidence: 0.9, place: { name: 'Veracruz', city: 'Austin', category: 'tacos', what_to_order: '' } }],
+      },
+    });
+    const result = await runPipeline(env, params);
+    expect(result.skipped).toBeUndefined();
+    expect(svc.sheetWrites[0].rows[0]).toMatchObject({ title: 'Veracruz' });
+  });
+
   it('falls back to the video when the caption lacks steps', async () => {
     const svc = fakeServices({
       caption: 'Easy pasta 🍝',
