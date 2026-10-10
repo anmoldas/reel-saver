@@ -69,7 +69,8 @@ in instagram or tiktok: Share → Save to Sheet (in tiktok it's under Share → 
 
 ## how it decides
 
-- **caption first.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, an idea has no takeaways, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
+- **caption first for places and recipes.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
+- **ideas always watch the video.** tips and advice are usually spoken, and the caption is just a teaser, so any post read as an idea is re-read with the video.
 - **several places in one post** become one row each.
 - **duplicates**: links are normalised (`instagram.com/share/...`, `vm.tiktok.com/...`, `?igsh=` all collapse to one URL). if a non-failed row already exists you get "Already saved: X" and nothing runs.
 - **thumbnails** are copied to a `Reel Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.

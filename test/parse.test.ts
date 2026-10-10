@@ -42,12 +42,14 @@ describe('normalizeParse and needsVideo', () => {
     expect(needsVideo(recipe([]), 0.7)).toMatch(/missing/);
   });
 
-  it('asks for the video on low confidence, empty results or ideas without takeaways', () => {
+  it('asks for the video on low confidence or empty results', () => {
     expect(needsVideo(normalizeParse({ items: [{ type: 'idea', title: 'x', confidence: 0.3 }] }), 0.7)).toMatch(/low/);
     expect(needsVideo(normalizeParse({ items: [] }), 0.7)).toMatch(/nothing/);
-    expect(needsVideo(normalizeParse({ items: [{ type: 'idea', title: 'x', confidence: 0.9, idea: { takeaways: [] } }] }), 0.7)).toMatch(
-      /takeaways/,
-    );
+  });
+
+  it('always uses the video for ideas, even with a confident caption parse', () => {
+    const idea = normalizeParse({ items: [{ type: 'idea', title: 'x', confidence: 0.95, idea: { takeaways: ['a', 'b', 'c'] } }] });
+    expect(needsVideo(idea, 0.7)).toMatch(/ideas always use the video/);
   });
 
   it('cleans up bad model output', () => {
