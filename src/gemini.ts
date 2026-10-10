@@ -89,9 +89,14 @@ Classify what the post is worth saving for:
   - "topic": one of ${topics.map((t) => `"${t}"`).join(', ')}. Travel advice without specific named spots is "Travel tips".
   - "suggested_topic": only when the topic is "${OTHER}", a short name for the topic it would need (e.g. "Fitness"); otherwise empty.
   - "takeaways": the 3 to 5 most useful points the post actually makes, each a short standalone sentence.
-  - "mentioned": the specific products, apps, tools, brands, stores, books, shows, courses or people the post recommends, reviews or shows how to use: things the viewer could buy, use, watch, read or follow. Leave out names that are only part of the creator's story or background, such as their employers, schools, clients or cities they lived in, and anything mentioned only in passing or criticised. Empty is fine. For each:
-    - "name": what it is called, as specifically as the post says it (e.g. "Tea Tree & Rosemary Shampoo", "CapCut").
-    - "kind": one of ${MENTION_KINDS.map((k) => `"${k}"`).join(', ')}.
+  - "mentioned": the specific products, apps, tools, brands, stores, books, shows, courses or people the post recommends, reviews or shows how to use: things the viewer could buy, use, watch, read or follow. Leave out:
+    - names that are only part of the creator's story or background, such as their employers, schools, clients or cities they lived in;
+    - anything mentioned only in passing, criticised, ruled out ("too expensive", "didn't like it") or only used for comparison;
+    - giveaway prizes, sponsors of a giveaway, and sources the post merely credits (e.g. "via The Points Guy");
+    - places someone would visit (restaurants, shops as destinations, sights, temples, hotels, neighbourhoods) and transport lines: those are "place" items, not mentions. An online store or a chain to shop at is fine.
+    Empty is fine. For each:
+    - "name": what it is called, as specifically as the post says it (e.g. "Tea Tree & Rosemary Shampoo", "CapCut"), without words like "app" or "brand" unless they are part of the real name.
+    - "kind": one of ${MENTION_KINDS.map((k) => `"${k}"`).join(', ')}. "product" is a specific thing you buy; "brand" is a company or label recommended as a whole; "app/tool" is software or a website; "store" is where to buy; "show/movie" includes TV series and theatre; "book" is only for books.
     - "brand": the brand or maker when it is not already part of the name; otherwise empty.
     - "why": one short line on why the post recommends it.
     - "price": only if the post states a price; otherwise empty.

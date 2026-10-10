@@ -68,7 +68,9 @@ export function shopLink(m: Mention): string {
   const name = m.brand && !m.name.toLowerCase().includes(m.brand.toLowerCase()) ? `${m.brand} ${m.name}` : m.name;
   if (SHOPPABLE.has(m.kind)) return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(name)}`;
   const hint = m.kind === 'app/tool' ? 'app' : m.kind === 'show/movie' ? '' : m.kind;
-  return `https://www.google.com/search?q=${encodeURIComponent([name, hint].filter(Boolean).join(' '))}`;
+  // "Delta app" is already searchable; adding "app" again only adds noise.
+  const already = hint && new RegExp(`\\b${hint}\\b`, 'i').test(name);
+  return `https://www.google.com/search?q=${encodeURIComponent([name, already ? '' : hint].filter(Boolean).join(' '))}`;
 }
 
 /** One Mentions-tab row per thing an idea names. */
