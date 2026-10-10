@@ -69,7 +69,7 @@ function readFavorites(file) {
 }
 
 // Outcomes that should not be retried on the next run.
-const FINAL = /Already saved|private or deleted|Post unavailable/i;
+const FINAL = /Already saved|private or deleted|Post unavailable|Found nothing to save/i;
 // Failures that are about one video, so the import carries on.
 const PER_VIDEO = /private or deleted|Post unavailable|Found nothing to save|Video is too large|Could not work out which post|Timed out after/i;
 
