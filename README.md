@@ -114,18 +114,32 @@ if your sheet has the older `Saves` tab, paste the new `Code.gs`, pick `migrateS
 
 ## importing what you've already saved
 
-bring in your past TikTok favorites and Instagram saved posts. ask each app for your data in **JSON** format:
+bring in your past TikTok favorites and Instagram saved posts. three things to know first:
+
+- **it runs on your computer**, not online. your computer has to stay on, awake and connected the whole time. if it sleeps or you close the window, it just stops; run the same command again and it picks up where it left off.
+- **it's slow on purpose.** it sends one post at a time and waits for each to finish, so figure on roughly a minute per post: 100 posts is an hour or two, 500 is most of a day. plug in your laptop.
+- **it uses the same $5 of Apify credit as your everyday saves.** that's about 500 TikToks or 1,500 Instagram posts a month in total (see [what it costs](#what-it-costs)). if an import uses it all up, sharing new reels fails until next month. so leave some room: import a few hundred at a time with `--limit`, and do the rest next month. you can see what's left on apify.com under **Billing**.
+
+ask each app for your data in **JSON** format:
 
 - **tiktok**: Settings and privacy → Account → Download your data → JSON. you get `user_data_tiktok.json`.
 - **instagram**: Accounts Center → Your information and permissions → Download your information → Some of your information → **Saved** only → Download to device, Format **JSON**, Date range **All time**. unzip it; that's the folder you pass.
 
-then:
+see how many there are first (this sends nothing and costs nothing):
 
 ```sh
-node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https://YOUR-APP.vercel.app --since 2025-01-01
+node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --dry-run
 ```
 
-it sends everything newest first, one at a time, waiting for each save to finish, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.import-progress.json`). the SECRET is read from `.env.local`. costs are the same as normal saves (see [what it costs](#what-it-costs)): around 500 TikToks or 1,500 Instagram posts fit in Apify's free $5 a month, so for more, spread runs across months or start with `--since`.
+then send the newest ones, a batch at a time:
+
+```sh
+node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https://YOUR-APP.vercel.app --since 2025-01-01 --limit 300
+```
+
+on a mac, put `caffeinate -i` in front of the command to keep it from sleeping while it runs. on windows, set Settings → System → Power → Sleep to Never while it runs.
+
+it sends newest first, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops by itself at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. running it again skips anything already done (progress is in `.import-progress.json`), so next month's batch is the same command. the SECRET is read from `.env.local`.
 
 ## how it works
 

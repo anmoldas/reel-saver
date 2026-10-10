@@ -130,7 +130,13 @@ Finish with a short tour in plain words:
 
 ### Step 9 (optional): Bring in what they've already saved
 
-Ask whether they want their past TikTok favorites and Instagram saved posts in the sheet too. If yes, have them request their data (it takes minutes to a day, so they can do this first and come back):
+Ask whether they want their past TikTok favorites and Instagram saved posts in the sheet too. Before they decide, tell them plainly:
+
+- **It runs on this computer.** It has to stay on, awake, plugged in and online, with this Claude Code window open, until it finishes. If it stops (sleep, lid closed, window closed), running the same command again continues where it left off.
+- **It takes a while:** roughly a minute per post, so 100 posts is an hour or two and 500 is most of a day. A good time is when they won't need the computer, or in batches.
+- **It shares the $5 monthly Apify credit with their everyday saves.** About 500 TikToks or 1,500 Instagram posts a month in total. If the import uses it up, new saves from their phone fail until next month.
+
+If yes, have them request their data (it takes minutes to a day, so they can do this first and come back):
 
 - **TikTok:** **Profile → ☰ → Settings and privacy → Account → Download your data**. Pick **JSON**, select **All data**, and tap **Request data**. When it's ready, download the zip from the **Download data** tab.
 - **Instagram:** **Settings → Accounts Center → Your information and permissions → Download your information → Download or transfer information** → their Instagram account → **Some of your information** → tick only **Saved** → **Download to device** → Date range **All time**, Format **JSON** → **Create files**. Instagram emails them when it's ready.
@@ -139,8 +145,9 @@ Then:
 
 1. Have them put the zips in this folder, or tell you where they are. Unzip each into its own new folder. For TikTok, only read the favorites part of `user_data_tiktok.json`; the file also holds their DMs, which you don't need.
 2. Preview: `node scripts/import-saves.mjs <tiktok json> <instagram folder> --dry-run`. Pass whichever exports they have. Tell them how many saves there are per year, and which Instagram collections they're in (those go in the notes column).
-3. Cost check before sending: each TikTok uses about half a cent to a cent of Apify's free $5 a month and each Instagram post about a third of a cent, so roughly 500 TikToks or 1,500 posts fit in a month. Suggest starting with the newest, e.g. `--since 2025-01-01`, or a quick `--limit 10` test they can look at first.
-4. Run it with `--url https://<their-app>.vercel.app` and without `--dry-run`. It sends one at a time, newest first, keeps the date they saved each one, skips deleted posts and just-for-fun ones, and stops by itself on errors like running out of Apify credit. Running the same command again later continues where it stopped.
+3. Pick a batch together. From the preview count, say how long it will take and roughly what share of the $5 it uses. Keep about $1 back for everyday saves: at most about **400 TikToks or 1,300 Instagram posts in a month**, fewer if Apify already shows usage this month (apify.com → **Billing**). Suggest the newest first with `--since` (e.g. `--since 2025-01-01`), a batch size with `--limit`, and a quick `--limit 10` test they look at in the sheet before the big run. If they have more than one month's worth, tell them to do the rest next month with the same command.
+4. Keep the computer awake while it runs: on a Mac put `caffeinate -i` in front of the command; on Windows have them set **Settings → System → Power → Sleep** to **Never** for now (and set it back afterwards).
+5. Run it with `--url https://<their-app>.vercel.app`, the agreed `--since` / `--limit`, and without `--dry-run`. Run it in the background so it isn't cut off by a command time limit, and check on it now and then. It sends one at a time, newest first, keeps the date they saved each one, skips deleted posts and just-for-fun ones, and stops by itself on errors like running out of Apify credit. When it ends, tell them how many were saved, skipped and failed, and what's left for next time.
 
 ---
 
