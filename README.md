@@ -70,12 +70,14 @@ one tab per kind of save. columns are matched by name, so you can reorder them o
 
 ### mentions
 
-every thing an idea recommends gets its own row in **Mentions**: a shopping and to-try list across all your saves.
+every thing an idea recommends gets one row in **Mentions**: a shopping and to-try list across all your saves. when another save recommends the same thing, it's added to that row instead of making a new one.
 
 - `kind` is one of product, app/tool, brand, store, book, show/movie, course, person. `why` is one line on why it was recommended; `price` is filled only when the video says one.
 - `shop_link` is a Google Shopping search for products and brands, and a web search for everything else.
 - `status` is a dropdown (want, bought, tried, skip); `notes` is yours.
-- `times_mentioned` counts how many rows name the same thing, so something three creators recommend stands out.
+- `times_mentioned` counts the saves that recommend it, so something three creators recommend stands out. `from`, `creator` and `source_url` list each of those saves, one per line. `why` keeps the first save's reason.
+- names match loosely: case, accents and punctuation don't matter, and "Glaze Drops" by Kérastase matches "Kerastase Glaze Drops". a brand on its own ("Muji") stays separate from its products ("Muji Lip Essence").
+- places don't go here (they're in Places), and neither does anything the creator criticised, a giveaway prize or a credited source.
 - ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once from the editor to turn those into rows (kind, brand, why and price stay empty for them).
 
 ### topics

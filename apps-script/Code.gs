@@ -93,8 +93,7 @@ function write_(sourceUrl, rows) {
 
   // Earlier failed rows, and mentions left over from a save that was deleted, are replaced.
   deleteRowsFor_(sheetFor_('failed'), sourceUrl);
-  const mentions = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.mention.name);
-  if (mentions) deleteRowsFor_(mentions, sourceUrl);
+  detachMentions_(sourceUrl);
 
   const thumbCache = {};
   const byType = {};
@@ -107,7 +106,9 @@ function write_(sourceUrl, rows) {
     (byType[type] = byType[type] || []).push(row);
   });
   let written = 0;
-  Object.keys(byType).forEach(function (type) { written += append_(type, byType[type]); });
+  Object.keys(byType).forEach(function (type) {
+    written += type === 'mention' ? mergeMentions_(byType[type]) : append_(type, byType[type]);
+  });
   return { ok: true, written: written };
 }
 
@@ -127,14 +128,114 @@ function append_(type, rows) {
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(MENTION_STATUSES, true).build();
     sheet.getRange(start, statusCol + 1, values.length, 1).setDataValidation(rule);
   }
-  // How many saves in this tab name the same thing: a strong "everyone recommends it" signal.
-  const timesCol = header.indexOf('times_mentioned');
-  const nameCol = header.indexOf('name');
-  if (timesCol !== -1 && nameCol !== -1) {
-    const c = nameCol + 1;
-    sheet.getRange(start, timesCol + 1, values.length, 1).setFormulaR1C1('=COUNTIF(C' + c + ':C' + c + ',RC' + c + ')');
-  }
   return values.length;
+}
+
+// ---- Mentions: one row per thing, listing every save that recommends it ----
+// source_url, from and creator hold one line per save, in the same order; times_mentioned counts them.
+
+const MENTION_LISTS = ['source_url', 'from', 'creator'];
+
+function lines_(value) {
+  return String(value || '').split('\n').map(function (s) { return s.trim(); }).filter(String);
+}
+
+/** A per-save list, padded or cut to n lines so it stays in step with source_url (a creator can be blank). */
+function listOf_(value, n) {
+  const list = value === '' || value === null || value === undefined ? [] : String(value).split('\n');
+  while (list.length < n) list.push('');
+  return list.slice(0, n);
+}
+
+/** Lower case, no accents, punctuation or leading "the", so "The Pitt" and "the pitt!" match. */
+function norm_(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/^the /, '');
+}
+
+function mentionKeys_(name, brand) {
+  const bare = norm_(name);
+  const b = norm_(brand);
+  return { bare: bare, brand: b, full: b && (' ' + bare + ' ').indexOf(' ' + b + ' ') === -1 ? b + ' ' + bare : bare };
+}
+
+/** Same thing: same name with its brand, or the same name where at most one side names a brand. */
+function sameMention_(a, b) {
+  return a.full === b.full || (a.bare === b.bare && (!a.brand || !b.brand || a.brand === b.brand));
+}
+
+/** Adds each mention to the row for the same thing, or appends a new row. Returns rows touched. */
+function mergeMentions_(rows) {
+  const sheet = sheetFor_('mention');
+  const header = header_(sheet, TABS.mention.columns);
+  const col = function (name) { return header.indexOf(name); };
+  const last = sheet.getLastRow();
+  const data = last < 2 ? [] : sheet.getRange(2, 1, last - 1, header.length).getValues();
+  const keys = data.map(function (r) { return mentionKeys_(r[col('name')], r[col('brand')]); });
+  const changed = {};
+  const fresh = [];
+
+  rows.forEach(function (row) {
+    const key = mentionKeys_(row.name, row.brand);
+    let i = -1;
+    for (let k = 0; k < keys.length && i === -1; k++) if (sameMention_(keys[k], key)) i = k;
+    if (i === -1) {
+      for (let k = 0; k < fresh.length && i === -1; k++) {
+        if (sameMention_(mentionKeys_(fresh[k].name, fresh[k].brand), key)) i = data.length + k;
+      }
+    }
+    if (i === -1) {
+      fresh.push(Object.assign({}, row, { times_mentioned: 1 }));
+      return;
+    }
+    const target = i < data.length ? rowObject_(header, data[i]) : fresh[i - data.length];
+    const urls = lines_(target.source_url);
+    if (urls.indexOf(row.source_url) !== -1) return; // this save already counted
+    MENTION_LISTS.forEach(function (c) { target[c] = listOf_(target[c], urls.length).concat([row[c] || '']).join('\n'); });
+    target.times_mentioned = urls.length + 1;
+    // The first save's wording stays; blanks get filled from later ones.
+    ['kind', 'brand', 'why', 'price', 'topic', 'shop_link'].forEach(function (c) { if (!target[c] && row[c]) target[c] = row[c]; });
+    if (i < data.length) {
+      data[i] = header.map(function (c) { return target[c]; });
+      changed[i] = true;
+    }
+  });
+
+  Object.keys(changed).forEach(function (i) {
+    sheet.getRange(Number(i) + 2, 1, 1, header.length).setValues([data[i].map(function (v, c) { return cell_(header[c], v); })]);
+  });
+  return Object.keys(changed).length + append_('mention', fresh);
+}
+
+/** Removes one save from the Mentions tab: its line goes, and a row with no saves left is deleted. */
+function detachMentions_(sourceUrl) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.mention.name);
+  if (!sheet || sheet.getLastRow() < 2 || !sourceUrl) return;
+  const header = header_(sheet, TABS.mention.columns);
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  for (let i = data.length - 1; i >= 0; i--) {
+    const row = rowObject_(header, data[i]);
+    const urls = lines_(row.source_url);
+    const at = urls.indexOf(sourceUrl);
+    if (at === -1) continue;
+    if (urls.length === 1) {
+      sheet.deleteRow(i + 2);
+      continue;
+    }
+    MENTION_LISTS.forEach(function (c) {
+      const list = c === 'source_url' ? urls.slice() : listOf_(row[c], urls.length);
+      list.splice(at, 1);
+      row[c] = list.join('\n');
+    });
+    row.times_mentioned = urls.length - 1;
+    sheet.getRange(i + 2, 1, 1, header.length).setValues([header.map(function (c) { return cell_(c, row[c]); })]);
+  }
+}
+
+function rowObject_(header, values) {
+  const out = {};
+  header.forEach(function (c, i) { out[c] = values[i]; });
+  return out;
 }
 
 function deleteRowsFor_(sheet, sourceUrl) {
@@ -360,6 +461,12 @@ function backfillMentions() {
     return;
   }
   const mentionsSheet = sheetFor_('mention');
+  const mentionUrls = {};
+  if (mentionsSheet.getLastRow() >= 2) {
+    const urlCol = header_(mentionsSheet, TABS.mention.columns).indexOf('source_url') + 1;
+    mentionsSheet.getRange(2, urlCol, mentionsSheet.getLastRow() - 1, 1).getValues()
+      .forEach(function (r) { lines_(r[0]).forEach(function (u) { mentionUrls[u] = true; }); });
+  }
   const values = ideas.getDataRange().getValues();
   const header = values[0].map(String);
   const col = function (name) { return header.indexOf(name); };
@@ -367,7 +474,7 @@ function backfillMentions() {
   values.slice(1).forEach(function (r) {
     const url = r[col('source_url')];
     const names = String(r[col('mentioned')] || '').split(',').map(function (n) { return n.trim(); }).filter(String);
-    if (!url || !names.length || rowsIn_(mentionsSheet, url).length) return;
+    if (!url || !names.length || mentionUrls[url]) return;
     names.forEach(function (name) {
       rows.push({
         saved_at: r[col('saved_at')], status: 'want', name: name, topic: r[col('topic')],
@@ -376,7 +483,7 @@ function backfillMentions() {
       });
     });
   });
-  append_('mention', rows);
+  mergeMentions_(rows);
   Logger.log('Added ' + rows.length + ' mentions.');
 }
 

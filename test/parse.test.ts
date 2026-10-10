@@ -223,6 +223,8 @@ describe('mentions', () => {
 
   it('uses Google Shopping for products and a web search for everything else', () => {
     expect(shopLink({ name: 'CapCut', kind: 'app/tool', brand: '', why: '', price: '' })).toBe('https://www.google.com/search?q=CapCut%20app');
+    expect(shopLink({ name: 'Delta app', kind: 'app/tool', brand: 'Delta', why: '', price: '' })).toBe('https://www.google.com/search?q=Delta%20app');
+    expect(shopLink({ name: 'YesStyle Store', kind: 'store', brand: '', why: '', price: '' })).toBe('https://www.google.com/search?q=YesStyle%20Store');
     expect(shopLink({ name: 'Atomic Habits', kind: 'book', brand: '', why: '', price: '' })).toBe(
       'https://www.google.com/search?q=Atomic%20Habits%20book',
     );
