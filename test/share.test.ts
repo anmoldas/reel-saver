@@ -38,6 +38,13 @@ describe('POST /api/share', () => {
     expect(sheet[1].rows[0].saved_at).toBe('2024-03-05T10:00:00.000Z');
   });
 
+  it('waits for the real outcome when an import asks', async () => {
+    // The fake services make the pipeline fail, so a waited answer carries that failure, not "Saving…".
+    const res = await (await post({ url: 'https://www.instagram.com/reel/NEW/', secret: 'sek', wait: true })).json();
+    expect(res.pending).toBeUndefined();
+    expect(res).toMatchObject({ ok: false, message: expect.stringMatching(/^Couldn't save/) });
+  });
+
   it('writes a failed row for unsupported links', async () => {
     const res = await (await post({ url: 'https://youtube.com/shorts/x', secret: 'sek' })).json();
     expect(res.ok).toBe(false);
