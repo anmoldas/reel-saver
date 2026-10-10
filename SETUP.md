@@ -4,7 +4,7 @@
 >
 > *Set up Reel Saver for me by following https://raw.githubusercontent.com/moneymolz/reel-saver/main/SETUP.md*
 >
-> It takes about 45 minutes, mostly creating free accounts. You'll need a computer (Mac or Windows) and an iPhone.
+> It takes about 45 minutes, mostly creating free accounts. You'll need a computer (Mac or Windows), an iPhone and a Google account. Along the way it has you sign up for **Apify**, **Google AI Studio** (Gemini) and **Vercel**, all free with no card, plus optionally **Google Cloud** for exact map pins, which asks for a card but stays free for normal use. You don't need any of these beforehand.
 
 ---
 

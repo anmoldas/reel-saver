@@ -9,8 +9,18 @@ tap **Share** on an instagram reel or tiktok, and it lands in your own google sh
 - an **iPhone** (it uses the Shortcuts app; Android works with the free HTTP Shortcuts app, see [SETUP.md](SETUP.md))
 - a **google account** for the sheet
 - a mac or windows computer for the one-time setup, about **45 minutes**, mostly making free accounts
-- **$0 to run** for normal use. none of the services it uses ask for a card, except the optional exact-address lookup
 - for the guided setup, [Claude Code](https://claude.com/claude-code), which needs a paid Claude plan. you can also [set it up by hand](#doing-it-by-hand) for free
+
+and these accounts, which the setup walks you through one at a time, so you don't need them beforehand:
+
+| account | what it does | cost |
+|---|---|---|
+| [Apify](https://apify.com) | fetches the post from instagram or tiktok | free, $5/month of credit, no card |
+| [Google AI Studio](https://aistudio.google.com) (Gemini) | reads the post and watches the video | free, no card. just sign in with your google account |
+| [Vercel](https://vercel.com) | runs the small app your phone sends links to | free Hobby plan, no card |
+| [Google Cloud](https://console.cloud.google.com) (optional) | exact addresses and map pins for places | asks for a card, but 5,000 lookups a month are free. skip it and places still get a maps link |
+
+so it's **$0 to run** for normal use.
 
 ## set it up
 
