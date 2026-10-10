@@ -6,9 +6,11 @@
 //
 //   --since 2025-01-01   only favorites saved on or after this date
 //   --limit 50           stop after this many sends
-//   --delay 30           seconds between sends (default 30, to stay inside the free Gemini/Apify limits)
+//   --delay 5            seconds between sends (default 5; each send already waits for the save to finish)
 //   --dry-run            list what would be sent, send nothing
 //
+// It stops at the first error that is not about one video (out of Apify credit, Gemini's daily
+// limit, the Sheet not answering), or after 3 failures in a row. Deleted or private videos are skipped.
 // The SECRET comes from .env.local (or the SECRET environment variable); it is never printed.
 // Progress is kept in .tiktok-import.json, so running the same command again picks up where it stopped.
 // Newest favorites go first.
@@ -23,7 +25,7 @@ function die(msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { delay: 30, limit: Infinity, since: null, dryRun: false, url: '', file: '' };
+  const opts = { delay: 5, limit: Infinity, since: null, dryRun: false, url: '', file: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') opts.dryRun = true;
@@ -68,6 +70,8 @@ function readFavorites(file) {
 
 // Outcomes that should not be retried on the next run.
 const FINAL = /Already saved|private or deleted|Post unavailable/i;
+// Failures that are about one video, so the import carries on.
+const PER_VIDEO = /private or deleted|Post unavailable|Found nothing to save|Video is too large|Could not work out which post/i;
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
@@ -87,6 +91,8 @@ async function main() {
   const secret = readSecret();
   const endpoint = `${opts.url.replace(/\/+$/, '')}/api/share`;
   const counts = { saved: 0, duplicate: 0, skipped: 0, failed: 0 };
+  let failedInARow = 0;
+  let stopReason = '';
 
   for (const [i, f] of batch.entries()) {
     let result;
@@ -94,7 +100,7 @@ async function main() {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: f.link, secret, saved_at: f.savedAt }),
+        body: JSON.stringify({ url: f.link, secret, saved_at: f.savedAt, wait: true }),
       });
       result = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }));
       if (res.status === 401) die('The app rejected the SECRET. Check it matches the one in Vercel.');
@@ -109,8 +115,14 @@ async function main() {
     writeFileSync(STATE, JSON.stringify(state, null, 1));
     console.log(`[${i + 1}/${batch.length}] ${kind === 'failed' ? '✗' : '✓'} ${f.savedAt?.slice(0, 10) ?? ''} ${message}`);
 
+    failedInARow = kind === 'failed' ? failedInARow + 1 : 0;
+    if (kind === 'failed' && !PER_VIDEO.test(message)) stopReason = message;
+    else if (failedInARow >= 3) stopReason = '3 failures in a row';
+    if (stopReason) break;
+
     if (i < batch.length - 1) await new Promise((r) => setTimeout(r, opts.delay * 1000));
   }
+  if (stopReason) console.log(`Stopped: ${stopReason}`);
   console.log(`Done: ${counts.saved} sent, ${counts.duplicate} already saved, ${counts.skipped} skipped as just for fun, ${counts.failed} failed.`);
   if (counts.failed) console.log('Run the same command again to retry the failed ones.');
 }

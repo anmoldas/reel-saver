@@ -135,7 +135,7 @@ request your data in TikTok (Settings → Account → Download your data, format
 node scripts/import-tiktok.mjs user_data_tiktok.json --url https://YOUR-APP.vercel.app --since 2025-01-01
 ```
 
-it sends your Favorites newest first, 30 seconds apart, and each row keeps the date you favorited it. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.tiktok-import.json`). the SECRET is read from `.env.local`. at ~$0.003–0.005 a TikTok, a few hundred fit in Apify's free $5 a month; for more, spread runs across months.
+it sends your Favorites newest first, one at a time, waiting for each save to finish, and each row keeps the date you favorited it. it stops at the first error that isn't about a single video (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private videos are just skipped. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.tiktok-import.json`). the SECRET is read from `.env.local`. at ~$0.003–0.005 a TikTok, a few hundred fit in Apify's free $5 a month; for more, spread runs across months.
 
 ## what it costs
 
