@@ -45,7 +45,7 @@ export async function runPipeline(env: Env, params: PipelineParams, deadlineMs =
 
 async function runSteps(
   env: Env,
-  { url, platform, savedAt }: PipelineParams,
+  { url, platform, savedAt, topics }: PipelineParams,
   state: { abandoned: boolean },
   onPost: (p: Post) => void,
 ): Promise<PipelineResult> {
@@ -59,14 +59,14 @@ async function runSteps(
   log(url, `fetched @${post.creator}, caption ${post.caption.length} chars, video ${post.videoUrl ? 'yes' : 'no'}`);
 
   // 2. Parse: caption first, video only when the caption is not enough
-  let result: ParseResult | null = post.caption ? await parseCaption(env, post) : null;
+  let result: ParseResult | null = post.caption ? await parseCaption(env, topics, post) : null;
   const reason = result ? needsVideo(result, env.CONFIDENCE_THRESHOLD) : 'no caption';
   if (reason && post.videoUrl) {
     log(url, `using video: ${reason}`);
     try {
       const file = await uploadVideo(env, post.videoUrl);
       try {
-        const fromVideo = await parseVideo(env, post, file);
+        const fromVideo = await parseVideo(env, topics, post, file);
         if (fromVideo.items.length) result = fromVideo;
       } finally {
         await deleteVideo(env, file.name);
