@@ -1,7 +1,7 @@
-import { timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { getEnv } from '../src/env.js';
 import { errorMessage } from '../src/errors.js';
+import { secretMatches } from '../src/secret.js';
 import { runPipeline } from '../src/pipeline.js';
 import { failedRow } from '../src/rows.js';
 import { findExisting, writeRows } from '../src/sheet.js';
@@ -10,13 +10,6 @@ import { extractUrl, resolvePostUrl } from '../src/urls.js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-
-function secretMatches(given: unknown, expected: string): boolean {
-  if (typeof given !== 'string') return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 async function readBody(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text();

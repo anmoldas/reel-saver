@@ -1,4 +1,5 @@
 import { errorMessage, withRetry } from './errors.js';
+import type { CleanupPlan, MentionRow } from './cleanup.js';
 import type { Env, Row } from './types.js';
 
 // Apps Script now and then answers with an error page instead of JSON; a retry usually works.
@@ -36,4 +37,27 @@ export async function findExisting(
 /** Appends rows. Replaces earlier "failed" rows for the same URL. */
 export async function writeRows(env: Env, sourceUrl: string, rows: Row[]): Promise<{ written: number; duplicate?: boolean }> {
   return call(env, { action: 'write', source_url: sourceUrl, rows });
+}
+
+/** Every Mentions row with its row number, for the one-time cleanup. */
+export async function readMentions(env: Env): Promise<{ count: number; rows: MentionRow[] }> {
+  return call(env, { action: 'mentions' });
+}
+
+export interface CleanupResult {
+  before: number;
+  removed: number;
+  after: number;
+  merged: string[];
+}
+
+/** Applies a reviewed plan (or, with dryRun, reports what it would do). The Sheet backs the tab up first. */
+export async function cleanMentions(env: Env, plan: CleanupPlan, dryRun: boolean): Promise<CleanupResult> {
+  return call(env, {
+    action: 'cleanMentions',
+    count: plan.count,
+    remove: plan.remove.map((r) => r.row),
+    updates: plan.updates.map((u) => ({ row: u.row, kind: u.kind, shop_link: u.shop_link })),
+    dry_run: dryRun,
+  });
 }

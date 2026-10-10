@@ -120,22 +120,19 @@ function generateUrl(model: string): string {
 // Overloaded (503), rate limited (429) or a server error: worth another try.
 const TEMPORARY_GEMINI = /^Gemini (429|500|502|503|504)\b/;
 
-function generate(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
-  return withRetry(() => generateOnce(env, lists, parts), (err) => TEMPORARY_GEMINI.test(errorMessage(err)));
+/** Asks Gemini for JSON matching `schema`, retrying temporary failures. Returns the parsed JSON. */
+export function askJson(env: Env, system: string, parts: unknown[], schema: unknown): Promise<any> {
+  return withRetry(() => askJsonOnce(env, system, parts, schema), (err) => TEMPORARY_GEMINI.test(errorMessage(err)));
 }
 
-async function generateOnce(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
+async function askJsonOnce(env: Env, system: string, parts: unknown[], schema: unknown): Promise<any> {
   const res = await fetch(generateUrl(env.GEMINI_MODEL), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: instructions(lists) }] },
+      systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: 'application/json',
-        responseSchema: responseSchema(lists),
-      },
+      generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema: schema },
     }),
   });
   const body = await res.text();
@@ -146,7 +143,11 @@ async function generateOnce(env: Env, lists: Lists, parts: unknown[]): Promise<P
     .map((p: any) => p.text)
     .join('');
   if (!text) throw new Error(`Gemini returned no text (${data.candidates?.[0]?.finishReason ?? 'no candidates'})`);
-  return normalizeParse(JSON.parse(text), lists);
+  return JSON.parse(text);
+}
+
+async function generate(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
+  return normalizeParse(await askJson(env, instructions(lists), parts, responseSchema(lists)), lists);
 }
 
 function postContext(post: Post): string {
