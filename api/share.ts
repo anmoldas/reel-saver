@@ -5,6 +5,7 @@ import { errorMessage } from '../src/errors.js';
 import { runPipeline } from '../src/pipeline.js';
 import { failedRow } from '../src/rows.js';
 import { findExisting, writeRows } from '../src/sheet.js';
+import { topicList } from '../src/topics.js';
 import { extractUrl, resolvePostUrl } from '../src/urls.js';
 
 const json = (body: unknown, status = 200) =>
@@ -67,21 +68,23 @@ async function handle(request: Request): Promise<Response> {
   }
   const { url, platform } = resolved;
 
+  let topics = topicList(null);
   try {
     const existing = await findExisting(env, url);
     if (existing.exists) return json({ ok: true, duplicate: true, message: `Already saved: ${existing.title ?? url}` });
+    topics = topicList(existing.topics);
   } catch (err) {
     console.log(`[reel-saver] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
 
   // Build step 2: `"stub": true` writes a placeholder row without calling Apify or Gemini.
   if (body.stub === true || body.stub === 'true') {
-    await writeRows(env, url, [{ saved_at: savedAt, type: 'recommendation', title: 'Stub row', source_url: url, status: 'to try' }]);
+    await writeRows(env, url, [{ saved_at: savedAt, type: 'idea', topic: 'Other', title: 'Stub row', source_url: url }]);
     return json({ ok: true, message: `Stub row written for ${url}` });
   }
 
   // Keep running after we answer; wait briefly so fast saves get a real confirmation.
-  const work = runPipeline(env, { url, platform, savedAt });
+  const work = runPipeline(env, { url, platform, savedAt, topics });
   waitUntil(work);
   const quick = await Promise.race([
     work,

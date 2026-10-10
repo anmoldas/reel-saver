@@ -17,6 +17,7 @@ export interface PipelineParams {
   url: string; // canonical post URL
   platform: Platform;
   savedAt: string; // ISO timestamp of the share
+  topics: string[]; // idea topics, from the sheet's Topics tab
 }
 
 export interface PipelineResult {
@@ -32,7 +33,7 @@ export interface Post {
   thumbnailUrl: string;
 }
 
-export type ItemType = 'recipe' | 'place' | 'recommendation';
+export type ItemType = 'recipe' | 'place' | 'idea';
 
 export interface ParsedItem {
   type: ItemType;
@@ -40,8 +41,8 @@ export interface ParsedItem {
   summary: string;
   confidence: number;
   recipe: { ingredients: string[]; steps: string[]; servings: string; time: string } | null;
-  place: { name: string; city: string; category: string; what_to_order: string } | null;
-  recommendation: { category: string; details: string } | null;
+  place: { name: string; city: string; country: string; category: string; what_to_order: string } | null;
+  idea: { topic: string; suggested_topic: string; takeaways: string[]; mentioned: string[] } | null;
 }
 
 export interface ParseResult {

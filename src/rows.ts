@@ -1,12 +1,8 @@
 import type { ParsedItem, PlaceMatch, Post, Row } from './types.js';
 import { mapsUrl } from './places.js';
 
-// Same order as the Sheet header (the Apps Script matches by name, so order is cosmetic).
-export const COLUMNS = [
-  'saved_at', 'type', 'title', 'summary', 'details', 'source_url', 'creator', 'thumbnail_url',
-  'recipe_ingredients', 'recipe_steps', 'place_name', 'place_address', 'place_city',
-  'lat', 'lng', 'maps_url', 'place_id', 'category', 'notes', 'status',
-] as const;
+// Each row's `type` picks its tab in the sheet: place → Places, recipe → Recipes,
+// idea → Ideas, failed → Failed. The Apps Script owns each tab's column list.
 
 interface Base {
   savedAt: string;
@@ -20,41 +16,52 @@ function baseRow({ savedAt, sourceUrl, post }: Base): Row {
     source_url: sourceUrl,
     creator: post?.creator ? `@${post.creator}` : '',
     thumbnail_url: post?.thumbnailUrl ?? '',
-    status: 'to try',
   };
+}
+
+const bullets = (items: string[]) => items.map((i) => `• ${i}`).join('\n');
+
+/** "1-2-3 Shibuya, Tokyo 150-0002, Japan" → "Japan". */
+export function countryFromAddress(address: string): string {
+  const last = address.split(',').pop()?.trim() ?? '';
+  return /\d/.test(last) ? '' : last;
 }
 
 export function itemRow(base: Base, item: ParsedItem, match: PlaceMatch | null = null): Row {
   const row: Row = { ...baseRow(base), type: item.type, title: item.title, summary: item.summary };
-  if (item.recipe) {
-    const r = item.recipe;
-    row.recipe_ingredients = r.ingredients.map((i) => `• ${i}`).join('\n');
-    row.recipe_steps = r.steps.map((step, i) => `${i + 1}. ${step}`).join('\n');
-    row.details = [r.servings && `Serves ${r.servings}`, r.time].filter(Boolean).join(' · ');
-  }
   if (item.place) {
     const p = item.place;
-    row.place_name = p.name;
-    row.place_city = p.city;
     row.category = p.category;
-    row.details = p.what_to_order ? `Order: ${p.what_to_order}` : '';
+    row.city = p.city;
+    row.country = p.country || countryFromAddress(match?.address ?? '');
+    row.what_to_order = p.what_to_order;
     row.maps_url = match?.mapsUrl ?? mapsUrl(p.name, p.city);
     if (match) {
       row.place_id = match.placeId;
-      row.place_address = match.address;
+      row.address = match.address;
       if (match.lat !== null) row.lat = match.lat;
       if (match.lng !== null) row.lng = match.lng;
     }
   }
-  if (item.recommendation) {
-    row.category = item.recommendation.category;
-    row.details = item.recommendation.details;
+  if (item.recipe) {
+    const r = item.recipe;
+    row.ingredients = bullets(r.ingredients);
+    row.steps = r.steps.map((step, i) => `${i + 1}. ${step}`).join('\n');
+    row.servings = r.servings;
+    row.time = r.time;
+  }
+  if (item.idea) {
+    const d = item.idea;
+    row.topic = d.topic;
+    row.suggested_topic = d.suggested_topic;
+    row.takeaways = bullets(d.takeaways);
+    row.mentioned = d.mentioned.join(', ');
   }
   return row;
 }
 
 export function failedRow(base: Base, error: string): Row {
-  return { ...baseRow(base), type: 'failed', title: 'Could not save', summary: error };
+  return { ...baseRow(base), type: 'failed', error };
 }
 
 /** Text for the iOS notification. */

@@ -3,7 +3,7 @@ import { getEnv } from '../src/env.js';
 import { runPipeline } from '../src/pipeline.js';
 
 const env = getEnv({ SECRET: 's', APIFY_TOKEN: 'a', GEMINI_API_KEY: 'g', PLACES_API_KEY: 'p', SHEET_URL: 'https://sheet.test/exec' });
-const params = { url: 'https://www.instagram.com/reel/ABC/', platform: 'instagram' as const, savedAt: '2026-10-10T00:00:00Z' };
+const params = { url: 'https://www.instagram.com/reel/ABC/', platform: 'instagram' as const, savedAt: '2026-10-10T00:00:00Z', topics: ['Other'] };
 
 const ok = (body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', ...headers } });
@@ -61,7 +61,7 @@ describe('runPipeline', () => {
     expect(svc.calls.some((u) => u.includes('upload'))).toBe(false);
     const rows = svc.sheetWrites[0].rows;
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ type: 'place', place_name: 'Veracruz', place_id: 'PID', lat: 40, lng: -73, creator: '@chef' });
+    expect(rows[0]).toMatchObject({ type: 'place', title: 'Veracruz', city: 'Austin', place_id: 'PID', lat: 40, lng: -73, creator: '@chef' });
   });
 
   it('falls back to the video when the caption lacks steps', async () => {
@@ -77,7 +77,7 @@ describe('runPipeline', () => {
     expect(result.message).toBe('Saved recipe: Garlic pasta');
     expect(svc.geminiCalls()).toBe(2);
     expect(svc.sheetWrites[0].rows[0]).toMatchObject({
-      recipe_ingredients: '• pasta\n• garlic', recipe_steps: '1. boil\n2. toss', details: 'Serves 2 · 15 min',
+      ingredients: '• pasta\n• garlic', steps: '1. boil\n2. toss', servings: '2', time: '15 min',
     });
   });
 
@@ -85,7 +85,7 @@ describe('runPipeline', () => {
     const svc = fakeServices({ caption: '', captionParse: {}, apifyItem: { error: 'not_found', errorDescription: 'Private profile' } });
     const result = await runPipeline(env, params);
     expect(result.ok).toBe(false);
-    expect(svc.sheetWrites[0].rows[0]).toMatchObject({ type: 'failed', summary: 'Post unavailable: Private profile', source_url: params.url });
+    expect(svc.sheetWrites[0].rows[0]).toMatchObject({ type: 'failed', error: 'Post unavailable: Private profile', source_url: params.url });
   });
 
   it('writes a failed row when it runs out of time', async () => {
@@ -107,7 +107,7 @@ describe('video download', () => {
     const svc = fakeServices({
       caption: '',
       // No caption means the first (and only) Gemini call is the video one.
-      captionParse: { needs_video: false, items: [{ type: 'recommendation', title: 'Thing', summary: '', confidence: 0.9, recommendation: { category: 'x', details: 'y' } }] },
+      captionParse: { needs_video: false, items: [{ type: 'idea', title: 'Thing', summary: '', confidence: 0.9, idea: { topic: 'Other', takeaways: ['y'] } }] },
       apifyItem: { text: '', authorMeta: { name: 'a' }, mediaUrls: ['https://api.apify.com/v2/key-value-stores/s/records/v'] },
     });
     const inner = globalThis.fetch;
@@ -120,7 +120,7 @@ describe('video download', () => {
     });
     const result = await runPipeline(env, { ...params, platform: 'tiktok' });
     expect(seen.auth).toBe('Bearer a');
-    expect(result.message).toBe('Saved recommendation: Thing');
+    expect(result.message).toBe('Saved idea: Thing');
     expect(svc.geminiCalls()).toBe(1); // no caption, so straight to the video
   });
 });

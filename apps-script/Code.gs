@@ -4,14 +4,37 @@
  * Setup: Extensions > Apps Script in your Sheet, paste this file, then
  * Project Settings > Script properties > add SECRET (same value as the Vercel SECRET).
  * Deploy > New deployment > Web app, execute as Me, access Anyone.
+ *
+ * Rows land in one tab per type: Places, Recipes, Ideas, and Failed for errors.
+ * Idea topics come from the Topics tab: add a row there to add a topic.
  */
 
-const SHEET_NAME = 'Saves';
-const COLUMNS = [
-  'saved_at', 'type', 'title', 'summary', 'details', 'source_url', 'creator', 'thumbnail_url',
-  'recipe_ingredients', 'recipe_steps', 'place_name', 'place_address', 'place_city',
-  'lat', 'lng', 'maps_url', 'place_id', 'category', 'notes', 'status',
-];
+const TABS = {
+  place: {
+    name: 'Places',
+    columns: ['saved_at', 'done', 'title', 'category', 'city', 'country', 'address', 'what_to_order', 'summary',
+      'maps_url', 'lat', 'lng', 'place_id', 'creator', 'source_url', 'thumbnail_url', 'notes'],
+  },
+  recipe: {
+    name: 'Recipes',
+    columns: ['saved_at', 'done', 'title', 'summary', 'time', 'servings', 'ingredients', 'steps',
+      'creator', 'source_url', 'thumbnail_url', 'notes'],
+  },
+  idea: {
+    name: 'Ideas',
+    columns: ['saved_at', 'done', 'topic', 'title', 'summary', 'takeaways', 'mentioned', 'suggested_topic',
+      'creator', 'source_url', 'thumbnail_url', 'notes'],
+  },
+  failed: {
+    name: 'Failed',
+    columns: ['saved_at', 'source_url', 'error', 'creator'],
+  },
+};
+const CONTENT_TYPES = ['place', 'recipe', 'idea'];
+
+const TOPICS_TAB = 'Topics';
+const DEFAULT_TOPICS = ['Travel tips', 'Clothing', 'Career', 'AI', 'Video editing', 'Journaling', 'Organization'];
+
 // Instagram/TikTok image links expire within days, so thumbnails are copied to Drive.
 const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
@@ -42,40 +65,58 @@ function doPost(e) {
   }
 }
 
-/** Is there a non-failed row for this URL? */
+/** Is this URL already saved in Places, Recipes or Ideas? Also returns the topic list. */
 function check_(sourceUrl) {
-  const found = rowsFor_(sourceUrl).filter(function (r) { return r.type !== 'failed'; });
-  return found.length
-    ? { ok: true, exists: true, title: found[0].title, type: found[0].type, count: found.length }
-    : { ok: true, exists: false };
+  const found = savedRows_(sourceUrl);
+  const result = { ok: true, exists: found.length > 0, topics: readTopics_() };
+  if (found.length) {
+    result.title = found[0].title;
+    result.type = found[0].type;
+    result.count = found.length;
+  }
+  return result;
 }
 
-/** Append rows; earlier "failed" rows for the same URL are replaced. */
+/** Append rows to their tabs; earlier failed rows for the same URL are removed. */
 function write_(sourceUrl, rows) {
-  const sheet = sheet_();
-  const existing = rowsFor_(sourceUrl);
-  if (existing.some(function (r) { return r.type !== 'failed'; })) {
-    return { ok: true, written: 0, duplicate: true };
-  }
-  // Delete old failed rows, bottom-up so row numbers stay valid.
-  existing.map(function (r) { return r.rowNumber; }).sort(function (a, b) { return b - a; })
-    .forEach(function (n) { sheet.deleteRow(n); });
+  if (savedRows_(sourceUrl).length) return { ok: true, written: 0, duplicate: true };
 
-  if (!rows.length) return { ok: true, written: 0 };
-  const header = header_(sheet);
+  const failedSheet = sheetFor_('failed');
+  rowsIn_(failedSheet, sourceUrl).map(function (r) { return r.rowNumber; })
+    .sort(function (a, b) { return b - a; })
+    .forEach(function (n) { failedSheet.deleteRow(n); });
+
   const thumbCache = {};
-  const values = rows.map(function (row) {
-    if (row.thumbnail_url) {
+  const byType = {};
+  rows.forEach(function (row) {
+    const type = TABS[row.type] ? row.type : 'idea';
+    if (row.thumbnail_url && type !== 'failed') {
       thumbCache[row.thumbnail_url] = thumbCache[row.thumbnail_url] || saveThumbnail_(row.thumbnail_url);
       row.thumbnail_url = thumbCache[row.thumbnail_url];
     }
+    (byType[type] = byType[type] || []).push(row);
+  });
+  let written = 0;
+  Object.keys(byType).forEach(function (type) { written += append_(type, byType[type]); });
+  return { ok: true, written: written };
+}
+
+function append_(type, rows) {
+  if (!rows.length) return 0;
+  const sheet = sheetFor_(type);
+  const header = header_(sheet, TABS[type].columns);
+  const values = rows.map(function (row) {
     return header.map(function (col) { return cell_(col, row[col]); });
   });
-  sheet.getRange(sheet.getLastRow() + 1, 1, values.length, header.length).setValues(values);
-  return { ok: true, written: values.length };
+  const start = sheet.getLastRow() + 1;
+  sheet.getRange(start, 1, values.length, header.length).setValues(values);
+  const doneCol = header.indexOf('done');
+  if (doneCol !== -1) sheet.getRange(start, doneCol + 1, values.length, 1).insertCheckboxes();
+  return values.length;
 }
 
 function cell_(col, value) {
+  if (col === 'done') return value === true;
   if (value === undefined || value === null) return '';
   if (col === 'saved_at' && value) return new Date(value);
   // Stop text like "=..." from being read as a formula.
@@ -83,44 +124,73 @@ function cell_(col, value) {
   return value;
 }
 
-function rowsFor_(sourceUrl) {
-  const sheet = sheet_();
-  const header = header_(sheet);
-  const urlCol = header.indexOf('source_url');
-  const typeCol = header.indexOf('type');
-  const titleCol = header.indexOf('title');
-  const last = sheet.getLastRow();
-  if (last < 2 || !sourceUrl) return [];
-  const data = sheet.getRange(2, 1, last - 1, header.length).getValues();
-  const out = [];
-  data.forEach(function (r, i) {
-    if (r[urlCol] === sourceUrl) out.push({ rowNumber: i + 2, type: r[typeCol], title: r[titleCol] });
+/** Rows for this URL across Places, Recipes and Ideas. */
+function savedRows_(sourceUrl) {
+  let out = [];
+  CONTENT_TYPES.forEach(function (type) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS[type].name);
+    if (sheet) out = out.concat(rowsIn_(sheet, sourceUrl).map(function (r) { r.type = type; return r; }));
   });
   return out;
 }
 
-function sheet_() {
+function rowsIn_(sheet, sourceUrl) {
+  const last = sheet.getLastRow();
+  if (last < 2 || !sourceUrl) return [];
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const urlCol = header.indexOf('source_url');
+  const titleCol = header.indexOf('title');
+  if (urlCol === -1) return [];
+  const data = sheet.getRange(2, 1, last - 1, header.length).getValues();
+  const out = [];
+  data.forEach(function (r, i) {
+    if (r[urlCol] === sourceUrl) out.push({ rowNumber: i + 2, title: titleCol === -1 ? '' : r[titleCol] });
+  });
+  return out;
+}
+
+function sheetFor_(type) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+  const name = TABS[type].name;
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(COLUMNS);
+    sheet.appendRow(TABS[type].columns);
     sheet.setFrozenRows(1);
-    sheet.getRange(1, 1, 1, COLUMNS.length).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, TABS[type].columns.length).setFontWeight('bold');
   }
   return sheet;
 }
 
 /** Header names as they are in the sheet; any missing columns are added at the end. */
-function header_(sheet) {
+function header_(sheet, columns) {
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-  COLUMNS.forEach(function (col) {
+  columns.forEach(function (col) {
     if (header.indexOf(col) === -1) {
       header.push(col);
       sheet.getRange(1, header.length).setValue(col).setFontWeight('bold');
     }
   });
   return header;
+}
+
+/** Topics tab, created with the defaults the first time. */
+function readTopics_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(TOPICS_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(TOPICS_TAB);
+    sheet.getRange(1, 1, DEFAULT_TOPICS.length + 1, 1)
+      .setValues([['topic']].concat(DEFAULT_TOPICS.map(function (t) { return [t]; })));
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1).setFontWeight('bold');
+    sheet.getRange(1, 2).setValue('Add a row to add a topic. "Other" is always included.').setFontStyle('italic');
+  }
+  const last = sheet.getLastRow();
+  if (last < 2) return [];
+  return sheet.getRange(2, 1, last - 1, 1).getValues()
+    .map(function (r) { return String(r[0]).trim(); })
+    .filter(function (t) { return t; });
 }
 
 function saveThumbnail_(url) {
@@ -141,20 +211,68 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/** "1-2-3 Shibuya, Tokyo 150-0002, Japan" → "Japan". */
+function countryFromAddress_(address) {
+  const last = String(address || '').split(',').pop().trim();
+  return /\d/.test(last) ? '' : last;
+}
+
+/**
+ * One-time move from the old single "Saves" tab into Places / Recipes / Ideas / Failed.
+ * Run it once from the editor. The old tab is kept, renamed to "Saves (old)".
+ */
+function migrateSaves() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const old = ss.getSheetByName('Saves');
+  if (!old || old.getLastRow() < 2) {
+    Logger.log('No "Saves" tab with rows to move.');
+    return;
+  }
+  const values = old.getDataRange().getValues();
+  const header = values[0].map(String);
+  const byType = { place: [], recipe: [], idea: [], failed: [] };
+  values.slice(1).forEach(function (cells) {
+    const r = {};
+    header.forEach(function (h, i) { r[h] = cells[i]; });
+    if (!r.source_url) return;
+    const base = {
+      saved_at: r.saved_at, title: r.title, summary: r.summary, source_url: r.source_url,
+      creator: r.creator, thumbnail_url: r.thumbnail_url, notes: r.notes, done: r.status === 'done',
+    };
+    if (r.type === 'place') {
+      byType.place.push(Object.assign(base, {
+        category: r.category, city: r.place_city, country: countryFromAddress_(r.place_address),
+        address: r.place_address, what_to_order: String(r.details || '').replace(/^Order:\s*/, ''),
+        maps_url: r.maps_url, lat: r.lat, lng: r.lng, place_id: r.place_id,
+      }));
+    } else if (r.type === 'recipe') {
+      byType.recipe.push(Object.assign(base, { ingredients: r.recipe_ingredients, steps: r.recipe_steps, time: r.details }));
+    } else if (r.type === 'failed') {
+      byType.failed.push({ saved_at: r.saved_at, source_url: r.source_url, error: r.summary, creator: r.creator });
+    } else {
+      byType.idea.push(Object.assign(base, { topic: 'Other', suggested_topic: r.category, takeaways: r.details }));
+    }
+  });
+  Object.keys(byType).forEach(function (type) { append_(type, byType[type]); });
+  old.setName('Saves (old)');
+  readTopics_();
+  Logger.log('Moved: ' + Object.keys(byType).map(function (t) { return t + ' ' + byType[t].length; }).join(', '));
+}
+
 /** Build step 1: run this from the editor to check the sheet with a hand-written row. */
 function testWrite() {
   const result = write_('https://www.instagram.com/reel/TEST123/', [{
-    saved_at: new Date().toISOString(),
     type: 'place',
+    saved_at: new Date().toISOString(),
     title: 'Test Ramen Bar',
     summary: 'Hand-written test row. Delete me.',
-    details: 'Order: tonkotsu',
+    category: 'food',
+    city: 'New York',
+    country: 'United States',
+    what_to_order: 'tonkotsu',
     source_url: 'https://www.instagram.com/reel/TEST123/',
     creator: '@test',
-    place_name: 'Test Ramen Bar',
-    place_city: 'New York',
-    category: 'ramen',
-    status: 'to try',
   }]);
+  readTopics_();
   Logger.log(JSON.stringify(result));
 }

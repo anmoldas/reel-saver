@@ -1,6 +1,6 @@
 # reel saver
 
-share an instagram reel or tiktok from your phone → a row lands in a google sheet as a recipe, a place, or a recommendation.
+share an instagram reel or tiktok from your phone → a row lands in a google sheet as a place, a recipe, or an idea (tips, advice, products).
 
 ```
 iOS share sheet ──▶ Vercel function (api/share.ts)
@@ -10,7 +10,7 @@ iOS share sheet ──▶ Vercel function (api/share.ts)
                           → Google Places → Apps Script → Google Sheet
 ```
 
-the shortcut waits up to 20 seconds. if the save finishes in that time you get "Saved place: X", otherwise "Saving…" and the row shows up a bit later. anything that fails still gets a row with `type = failed` and the error in `summary`, and sharing the same link again retries it.
+the shortcut waits up to 20 seconds. if the save finishes in that time you get "Saved place: X", otherwise "Saving…" and the row shows up a bit later. anything that fails still gets a row in the **Failed** tab with the error, and sharing the same link again retries it.
 
 ## setup (about 30 minutes, once)
 
@@ -30,7 +30,7 @@ also make up one long random string to use as your `SECRET` (for example run `op
 1. create a new google sheet.
 2. Extensions → Apps Script. delete what's there and paste in `apps-script/Code.gs`.
 3. Project Settings (gear icon) → Script properties → add `SECRET` = your secret.
-4. back in the editor, pick `testWrite` from the function dropdown and click Run. approve the permissions (Sheets, Drive for thumbnails, external requests). a `Saves` tab appears with a header and one test row. delete the row.
+4. back in the editor, pick `testWrite` from the function dropdown and click Run. approve the permissions (Sheets, Drive for thumbnails, external requests). a `Places` tab appears with one test row, plus a `Topics` tab. delete the test row.
 5. Deploy → New deployment → type **Web app**. Execute as **Me**, Who has access **Anyone**. copy the URL ending in `/exec`. that's your `SHEET_URL`.
 
 > if you edit `Code.gs` later, use Deploy → Manage deployments → edit → Version: New version, so the URL stays the same.
@@ -69,18 +69,36 @@ in instagram or tiktok: Share → Save to Sheet (in tiktok it's under Share → 
 
 ## how it decides
 
-- **caption first.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
+- **caption first.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, an idea has no takeaways, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
 - **several places in one post** become one row each.
 - **duplicates**: links are normalised (`instagram.com/share/...`, `vm.tiktok.com/...`, `?igsh=` all collapse to one URL). if a non-failed row already exists you get "Already saved: X" and nothing runs.
 - **thumbnails** are copied to a `Reel Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
 
-## sheet columns
+## the sheet
 
-`saved_at, type, title, summary, details, source_url, creator, thumbnail_url, recipe_ingredients, recipe_steps, place_name, place_address, place_city, lat, lng, maps_url, place_id, category, notes, status`
+one tab per kind of save. columns are matched by name, so you can reorder them or add your own.
 
-- `details`: servings/time for recipes, what to order for places, the specifics for recommendations
-- `notes` is yours; the script never writes it
-- columns are matched by name, so you can reorder or add your own
+| tab | what lands there | columns |
+|---|---|---|
+| **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, creator, source_url, thumbnail_url, notes` |
+| **Recipes** | anything you'd cook | `saved_at, done, title, summary, time, servings, ingredients, steps, creator, source_url, thumbnail_url, notes` |
+| **Ideas** | everything else: tips, advice, how-tos, products, outfits, tools | `saved_at, done, topic, title, summary, takeaways, mentioned, suggested_topic, creator, source_url, thumbnail_url, notes` |
+| **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
+
+- place `category` is one of: food, cafe, bar, shop, sight, activity, stay, other. `country` lets you filter a trip (Japan, Netherlands…).
+- `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it names.
+- `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
+
+### topics
+
+the **Topics** tab lists the idea topics (Travel tips, Clothing, Career, AI, Video editing, Journaling, Organization to start). Gemini must pick one of them or "Other".
+
+- **to add a topic**, add a row to the Topics tab. the next save uses it; no redeploy.
+- **to find new topics**, filter Ideas to `topic = Other` now and then. the `suggested_topic` column says what Gemini would have called each one. if the same suggestion keeps appearing, add it to Topics.
+
+### moving from the old single tab
+
+if your sheet has the older `Saves` tab, paste the new `Code.gs`, pick `migrateSaves` in the function dropdown and click Run once. rows move to the new tabs and the old tab is kept as `Saves (old)`. then deploy a new version (Deploy → Manage deployments → edit → Version: New version) so the web app uses the new code.
 
 ## what it costs
 
