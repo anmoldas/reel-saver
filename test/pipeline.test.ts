@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEnv } from '../src/env.js';
 import { runPipeline } from '../src/pipeline.js';
+import { lists } from '../src/topics.js';
 
 const env = getEnv({ SECRET: 's', APIFY_TOKEN: 'a', GEMINI_API_KEY: 'g', PLACES_API_KEY: 'p', SHEET_URL: 'https://sheet.test/exec' });
-const params = { url: 'https://www.instagram.com/reel/ABC/', platform: 'instagram' as const, savedAt: '2026-10-10T00:00:00Z', topics: ['Other'] };
+const params = { url: 'https://www.instagram.com/reel/ABC/', platform: 'instagram' as const, savedAt: '2026-10-10T00:00:00Z', lists: lists() };
 
 const ok = (body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json', ...headers } });

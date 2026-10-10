@@ -1,4 +1,4 @@
-import { OTHER, PLACE_CATEGORIES } from './topics.js';
+import { DEFAULT_PLACE_TYPES, OTHER, OTHER_PLACE, type Lists } from './topics.js';
 import type { Env, ItemType, ParsedItem, ParseResult, Post } from './types.js';
 
 const BASE = 'https://generativelanguage.googleapis.com';
@@ -6,8 +6,8 @@ const BASE = 'https://generativelanguage.googleapis.com';
 const STR = { type: 'STRING' };
 const STR_LIST = { type: 'ARRAY', items: STR };
 
-/** Gemini's structured-output schema (OpenAPI subset). Topics come from the sheet, so it is built per call. */
-export function responseSchema(topics: string[]) {
+/** Gemini's structured-output schema (OpenAPI subset). The lists come from the sheet, so it is built per call. */
+export function responseSchema({ topics, placeTypes }: Lists) {
   return {
     type: 'OBJECT',
     properties: {
@@ -27,10 +27,11 @@ export function responseSchema(topics: string[]) {
                 name: STR,
                 city: STR,
                 country: STR,
-                category: { type: 'STRING', enum: PLACE_CATEGORIES },
+                category: { type: 'STRING', enum: placeTypes },
+                specialty: STR,
                 what_to_order: STR,
               },
-              required: ['name', 'city', 'country', 'category', 'what_to_order'],
+              required: ['name', 'city', 'country', 'category', 'specialty', 'what_to_order'],
             },
             recipe: {
               type: 'OBJECT',
@@ -60,11 +61,15 @@ export function responseSchema(topics: string[]) {
   };
 }
 
-export function instructions(topics: string[]): string {
+export function instructions({ topics, placeTypes }: Lists): string {
   return `You turn a saved social media post into structured notes.
 
 Classify what the post is worth saving for:
-- "place": a specific named restaurant, cafe, bar, shop, sight, activity or hotel someone could visit. Fill "place" with its name, city, country, a category (${PLACE_CATEGORIES.join(', ')}) and what to order, buy or do there.
+- "place": a specific named restaurant, cafe, bar, shop, sight, activity or hotel someone could visit. Fill "place" with:
+  - "name", "city" and "country".
+  - "category": one of ${placeTypes.map((t) => `"${t}"`).join(', ')}. Pick the closest; use "${OTHER_PLACE}" only if none fit.
+  - "specialty": a few words on what exactly it is (e.g. "ceramics and glassware store", "natural wine bar", "ramen").
+  - "what_to_order": what to order, buy or do there.
 - "recipe": a dish someone could cook. Fill "recipe" with every ingredient (with quantities when given) and the steps in order.
 - "idea": everything else worth remembering: advice, tips, how-tos, products, outfits, tools. Fill "idea" with:
   - "topic": one of ${topics.map((t) => `"${t}"`).join(', ')}. Travel advice without specific named spots is "Travel tips".
@@ -86,17 +91,17 @@ function generateUrl(model: string): string {
   return `${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 }
 
-async function generate(env: Env, topics: string[], parts: unknown[]): Promise<ParseResult> {
+async function generate(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
   const res = await fetch(generateUrl(env.GEMINI_MODEL), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: instructions(topics) }] },
+      systemInstruction: { parts: [{ text: instructions(lists) }] },
       contents: [{ role: 'user', parts }],
       generationConfig: {
         temperature: 0.2,
         responseMimeType: 'application/json',
-        responseSchema: responseSchema(topics),
+        responseSchema: responseSchema(lists),
       },
     }),
   });
@@ -108,24 +113,24 @@ async function generate(env: Env, topics: string[], parts: unknown[]): Promise<P
     .map((p: any) => p.text)
     .join('');
   if (!text) throw new Error(`Gemini returned no text (${data.candidates?.[0]?.finishReason ?? 'no candidates'})`);
-  return normalizeParse(JSON.parse(text), topics);
+  return normalizeParse(JSON.parse(text), lists);
 }
 
 function postContext(post: Post): string {
   return `Creator: @${post.creator || 'unknown'}\nCaption:\n${post.caption.slice(0, 8000) || '(no caption)'}`;
 }
 
-export function parseCaption(env: Env, topics: string[], post: Post): Promise<ParseResult> {
-  return generate(env, topics, [{ text: postContext(post) }]);
+export function parseCaption(env: Env, lists: Lists, post: Post): Promise<ParseResult> {
+  return generate(env, lists, [{ text: postContext(post) }]);
 }
 
 export function parseVideo(
   env: Env,
-  topics: string[],
+  lists: Lists,
   post: Post,
   file: { uri: string; mimeType: string },
 ): Promise<ParseResult> {
-  return generate(env, topics, [
+  return generate(env, lists, [
     { fileData: { mimeType: file.mimeType, fileUri: file.uri } },
     {
       text: `${postContext(post)}\n\nUse the video (speech, on-screen text and visuals) together with the caption. needs_video should be false now.`,
@@ -162,7 +167,10 @@ function pick(value: unknown, options: string[], fallback: string): string {
   return options.find((o) => o.toLowerCase() === v) ?? fallback;
 }
 
-export function normalizeParse(raw: any, topics: string[] = [OTHER]): ParseResult {
+export function normalizeParse(
+  raw: any,
+  { topics, placeTypes }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE] },
+): ParseResult {
   const items: ParsedItem[] = (Array.isArray(raw?.items) ? raw.items : []).flatMap((it: any): ParsedItem[] => {
     const type = TYPES.includes(it?.type) ? (it.type as ItemType) : 'idea';
     const conf = Number(it?.confidence);
@@ -184,7 +192,9 @@ export function normalizeParse(raw: any, topics: string[] = [OTHER]): ParseResul
         name: s(p.name) || item.title,
         city: s(p.city),
         country: s(p.country),
-        category: pick(p.category, PLACE_CATEGORIES, 'other'),
+        category: pick(p.category, placeTypes, OTHER_PLACE),
+        // A category the model invented is kept as the specialty rather than lost.
+        specialty: s(p.specialty) || (pick(p.category, placeTypes, '') ? '' : s(p.category)),
         what_to_order: s(p.what_to_order),
       };
     } else {

@@ -12,7 +12,7 @@
 const TABS = {
   place: {
     name: 'Places',
-    columns: ['saved_at', 'done', 'title', 'category', 'city', 'country', 'address', 'what_to_order', 'summary',
+    columns: ['saved_at', 'done', 'title', 'category', 'specialty', 'city', 'country', 'address', 'what_to_order', 'summary',
       'maps_url', 'lat', 'lng', 'place_id', 'creator', 'source_url', 'thumbnail_url', 'notes'],
   },
   recipe: {
@@ -34,6 +34,10 @@ const CONTENT_TYPES = ['place', 'recipe', 'idea'];
 
 const TOPICS_TAB = 'Topics';
 const DEFAULT_TOPICS = ['Travel tips', 'Clothing', 'Career', 'AI', 'Video editing', 'Journaling', 'Organization'];
+
+const PLACE_TYPES_TAB = 'Place types';
+const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'home & ceramics', 'clothing', 'beauty',
+  'books & stationery', 'market', 'museum & gallery', 'sight', 'activity', 'stay'];
 
 // Instagram/TikTok image links expire within days, so thumbnails are copied to Drive.
 const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
@@ -68,7 +72,7 @@ function doPost(e) {
 /** Is this URL already saved in Places, Recipes or Ideas? Also returns the topic list. */
 function check_(sourceUrl) {
   const found = savedRows_(sourceUrl);
-  const result = { ok: true, exists: found.length > 0, topics: readTopics_() };
+  const result = { ok: true, exists: found.length > 0, topics: readTopics_(), place_types: readPlaceTypes_() };
   if (found.length) {
     result.title = found[0].title;
     result.type = found[0].type;
@@ -174,17 +178,26 @@ function header_(sheet, columns) {
   return header;
 }
 
-/** Topics tab, created with the defaults the first time. */
 function readTopics_() {
+  return readList_(TOPICS_TAB, 'topic', DEFAULT_TOPICS, 'Add a row to add a topic. "Other" is always included.');
+}
+
+function readPlaceTypes_() {
+  return readList_(PLACE_TYPES_TAB, 'place type', DEFAULT_PLACE_TYPES,
+    'Add a row to add a place type. "other" is always included.');
+}
+
+/** A one-column list tab (Topics, Place types), created with the defaults the first time. */
+function readList_(tabName, header, defaults, note) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(TOPICS_TAB);
+  let sheet = ss.getSheetByName(tabName);
   if (!sheet) {
-    sheet = ss.insertSheet(TOPICS_TAB);
-    sheet.getRange(1, 1, DEFAULT_TOPICS.length + 1, 1)
-      .setValues([['topic']].concat(DEFAULT_TOPICS.map(function (t) { return [t]; })));
+    sheet = ss.insertSheet(tabName);
+    sheet.getRange(1, 1, defaults.length + 1, 1)
+      .setValues([[header]].concat(defaults.map(function (t) { return [t]; })));
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1).setFontWeight('bold');
-    sheet.getRange(1, 2).setValue('Add a row to add a topic. "Other" is always included.').setFontStyle('italic');
+    sheet.getRange(1, 2).setValue(note).setFontStyle('italic');
   }
   const last = sheet.getLastRow();
   if (last < 2) return [];
@@ -259,6 +272,57 @@ function migrateSaves() {
   Logger.log('Moved: ' + Object.keys(byType).map(function (t) { return t + ' ' + byType[t].length; }).join(', '));
 }
 
+// Keyword guesses for recategorizePlaces(), checked in order against the old category and the title.
+const PLACE_TYPE_KEYWORDS = [
+  ['home & ceramics', /ceramic|pottery|glass|home|decor|interior|furniture|homeware|kitchenware|candle/],
+  ['bakery & dessert', /bakery|bake|dessert|pastr|ice cream|gelato|donut|doughnut|cake|chocolate|sweet/],
+  ['cafe', /cafe|café|coffee|\btea\b|matcha|espresso/],
+  ['bar', /\bbar\b|cocktail|wine|pub|brewery|beer|izakaya|speakeasy/],
+  ['clothing', /cloth|boutique|fashion|vintage|thrift|apparel|denim|shoe|jewel/],
+  ['beauty', /beauty|cosmetic|skincare|salon|spa|nail|perfume/],
+  ['books & stationery', /book|stationer|paper|pen shop/],
+  ['market', /market|bazaar|grocery|deli/],
+  ['museum & gallery', /museum|gallery|exhibit|\bart\b/],
+  ['stay', /hotel|hostel|ryokan|inn\b|bnb|resort|stay/],
+  ['sight', /temple|shrine|park|garden|view|landmark|castle|bridge|beach|sight/],
+  ['activity', /class|workshop|tour|activity|hike|onsen|karaoke/],
+  ['restaurant', /restaurant|food|ramen|sushi|pizza|taco|noodle|bistro|diner|eat|bbq|burger|udon|curry/],
+];
+
+/**
+ * One-time cleanup: puts older free-text place categories onto the Place types list.
+ * The old wording moves to "specialty" so nothing is lost. Run it once from the editor;
+ * check the rows it logs as "other" and fix those by hand.
+ */
+function recategorizePlaces() {
+  const sheet = sheetFor_('place');
+  const header = header_(sheet, TABS.place.columns);
+  const last = sheet.getLastRow();
+  if (last < 2) return;
+  const types = readPlaceTypes_().map(function (t) { return t.toLowerCase(); });
+  const catCol = header.indexOf('category');
+  const specCol = header.indexOf('specialty');
+  const titleCol = header.indexOf('title');
+  const range = sheet.getRange(2, 1, last - 1, header.length);
+  const values = range.getValues();
+  const unmatched = [];
+  let changed = 0;
+  values.forEach(function (row) {
+    const old = String(row[catCol] || '').trim();
+    if (types.indexOf(old.toLowerCase()) !== -1) return; // already on the list
+    const text = (old + ' ' + row[titleCol]).toLowerCase();
+    const hit = PLACE_TYPE_KEYWORDS.filter(function (k) {
+      return types.indexOf(k[0]) !== -1 && k[1].test(text);
+    })[0];
+    if (old && !row[specCol]) row[specCol] = old;
+    row[catCol] = hit ? hit[0] : 'other';
+    if (!hit) unmatched.push(row[titleCol]);
+    changed++;
+  });
+  range.setValues(values);
+  Logger.log('Updated ' + changed + ' places. Set to "other", check by hand: ' + (unmatched.join(', ') || 'none'));
+}
+
 /** Build step 1: run this from the editor to check the sheet with a hand-written row. */
 function testWrite() {
   const result = write_('https://www.instagram.com/reel/TEST123/', [{
@@ -266,7 +330,8 @@ function testWrite() {
     saved_at: new Date().toISOString(),
     title: 'Test Ramen Bar',
     summary: 'Hand-written test row. Delete me.',
-    category: 'food',
+    category: 'restaurant',
+    specialty: 'ramen',
     city: 'New York',
     country: 'United States',
     what_to_order: 'tonkotsu',
@@ -274,5 +339,6 @@ function testWrite() {
     creator: '@test',
   }]);
   readTopics_();
+  readPlaceTypes_();
   Logger.log(JSON.stringify(result));
 }

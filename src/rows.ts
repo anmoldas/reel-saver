@@ -32,6 +32,7 @@ export function itemRow(base: Base, item: ParsedItem, match: PlaceMatch | null =
   if (item.place) {
     const p = item.place;
     row.category = p.category;
+    row.specialty = p.specialty;
     row.city = p.city;
     row.country = p.country || countryFromAddress(match?.address ?? '');
     row.what_to_order = p.what_to_order;
