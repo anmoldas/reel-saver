@@ -9,7 +9,7 @@ import type { Env, ParseResult, PipelineParams, PipelineResult, PlaceMatch, Post
 // Vercel Hobby stops functions at 300s. Give up early enough to still write the failure row.
 const DEADLINE_MS = 240_000;
 
-const log = (url: string, msg: string) => console.log(`[reel-saver] ${url} ${msg}`);
+const log = (url: string, msg: string) => console.log(`[loc-saver] ${url} ${msg}`);
 
 /**
  * Fetch → parse → enrich → store. Never throws: any failure becomes a "failed" row

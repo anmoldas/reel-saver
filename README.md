@@ -1,4 +1,4 @@
-# reel saver
+# loc saver
 
 share an instagram reel or tiktok from your phone → a row lands in a google sheet as a recipe, a place, or a recommendation.
 
@@ -37,7 +37,7 @@ also make up one long random string to use as your `SECRET` (for example run `op
 
 ### 3. deploy to vercel
 
-1. vercel.com → Add New → Project → import `anmoldas/reel-saver`.
+1. vercel.com → Add New → Project → import `anmoldas/loc-saver`.
 2. framework preset: Other. leave the build settings empty.
 3. Environment Variables: add `SECRET`, `APIFY_TOKEN`, `GEMINI_API_KEY`, `PLACES_API_KEY`, `SHEET_URL`. the rest of `.env.example` is optional.
 4. Deploy. your endpoint is `https://<project>.vercel.app/api/share`.
@@ -50,7 +50,7 @@ curl -X POST https://<project>.vercel.app/api/share \
   -d '{"url":"https://www.instagram.com/reel/TEST1/","secret":"YOUR_SECRET","stub":true}'
 ```
 
-then a real one (drop `"stub":true` and use a real reel or tiktok link). logs are under the project's **Logs** tab in Vercel. every step prints a `[reel-saver]` line.
+then a real one (drop `"stub":true` and use a real reel or tiktok link). logs are under the project's **Logs** tab in Vercel. every step prints a `[loc-saver]` line.
 
 ### 4. iOS shortcut
 
@@ -72,7 +72,7 @@ in instagram or tiktok: Share → Save to Sheet (in tiktok it's under Share → 
 - **caption first.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
 - **several places in one post** become one row each.
 - **duplicates**: links are normalised (`instagram.com/share/...`, `vm.tiktok.com/...`, `?igsh=` all collapse to one URL). if a non-failed row already exists you get "Already saved: X" and nothing runs.
-- **thumbnails** are copied to a `Reel Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
+- **thumbnails** are copied to a `Loc Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
 
 ## sheet columns
 

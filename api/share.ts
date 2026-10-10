@@ -27,7 +27,7 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
 }
 
 export function GET(): Response {
-  return json({ ok: true, service: 'reel-saver' });
+  return json({ ok: true, service: 'loc-saver' });
 }
 
 /** POST { url, secret } from the iOS Shortcut. Always answers with { ok, message }. */
@@ -62,7 +62,7 @@ export async function POST(request: Request): Promise<Response> {
     const existing = await findExisting(env, url);
     if (existing.exists) return json({ ok: true, duplicate: true, message: `Already saved: ${existing.title ?? url}` });
   } catch (err) {
-    console.log(`[reel-saver] duplicate check failed, continuing: ${errorMessage(err)}`);
+    console.log(`[loc-saver] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
 
   // Build step 2: `"stub": true` writes a placeholder row without calling Apify or Gemini.

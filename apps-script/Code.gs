@@ -1,5 +1,5 @@
 /**
- * Reel Saver: Sheet write endpoint.
+ * Loc Saver: Sheet write endpoint.
  *
  * Setup: Extensions > Apps Script in your Sheet, paste this file, then
  * Project Settings > Script properties > add SECRET (same value as the Vercel SECRET).
@@ -13,10 +13,10 @@ const COLUMNS = [
   'lat', 'lng', 'maps_url', 'place_id', 'category', 'notes', 'status',
 ];
 // Instagram/TikTok image links expire within days, so thumbnails are copied to Drive.
-const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
+const THUMBNAIL_FOLDER = 'Loc Saver thumbnails';
 
 function doGet() {
-  return json_({ ok: true, service: 'reel-saver sheet' });
+  return json_({ ok: true, service: 'loc-saver sheet' });
 }
 
 function doPost(e) {
