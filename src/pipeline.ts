@@ -82,7 +82,7 @@ async function runSteps(
   // 3. Enrich places (a lookup failure only loses the address, not the row)
   const matches: (PlaceMatch | null)[] = await Promise.all(
     result.items.map(async (item) => {
-      if (!item.place?.name) return null;
+      if (!item.place?.name || !env.PLACES_API_KEY) return null;
       try {
         return await findPlace(env, item.place.name, item.place.city);
       } catch (err) {
