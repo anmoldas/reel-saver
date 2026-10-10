@@ -2,7 +2,7 @@
 
 > **If you're a person reading this:** you don't need to follow these steps yourself. Open Claude Code in an empty folder and say:
 >
-> *Set up Reel Saver for me by following https://raw.githubusercontent.com/anmoldas/reel-saver/main/SETUP.md*
+> *Set up Reel Saver for me by following https://raw.githubusercontent.com/moneymolz/reel-saver/main/SETUP.md*
 >
 > It takes about 30–45 minutes, mostly creating free accounts. You'll need a computer (Mac or Windows) and an iPhone.
 
@@ -29,13 +29,13 @@ Check Node.js 20 or newer is installed: `node -v`. If it's missing or old, ask t
 Download the code into the current folder, without needing git:
 
 ```sh
-curl -L https://github.com/anmoldas/reel-saver/archive/refs/heads/main.tar.gz | tar xz
+curl -L https://github.com/moneymolz/reel-saver/archive/refs/heads/main.tar.gz | tar xz
 cd reel-saver-main
 npm install
 npm test
 ```
 
-On Windows, if `tar` or `curl` fail, download https://github.com/anmoldas/reel-saver/archive/refs/heads/main.zip, unzip it, and `cd` into it. All tests should pass. Every later command runs inside this folder.
+On Windows, if `tar` or `curl` fail, download https://github.com/moneymolz/reel-saver/archive/refs/heads/main.zip, unzip it, and `cd` into it. All tests should pass. Every later command runs inside this folder.
 
 Then create the settings file. This also generates their private SECRET:
 
@@ -122,10 +122,21 @@ Android doesn't have Shortcuts. An Android user can get the same result with the
 Finish with a short tour in plain words:
 
 - **Places, Recipes, Ideas** tabs. Each row has a **done** checkbox and a **notes** column that are theirs.
-- **Mentions**: every product, app, brand or book an idea names, with a shopping link, a want / bought / tried / skip dropdown, and how many saves mention it.
+- **Mentions**: every product, app, brand or book an idea recommends, with a shopping link, a want / bought / tried / skip dropdown, and how many saves mention it.
 - **Topics** and **Place types** tabs: these are the lists Gemini sorts into. Encourage them to replace the starter topics with their own interests (e.g. Fitness, Skincare, Home). Adding a row is all it takes; no code. Ideas that fit nothing land in **Other** with a **suggested_topic**, which shows which topics to add.
 - **Failed** tab: anything that couldn't be saved, with the reason. Sharing the same link again retries it.
 - Sharing the same post twice says "Already saved".
+- Posts that are just for fun (jokes, memes, skits) say "Skipped: just for fun" and add no row.
+
+### Step 9 (optional): Bring in the TikToks they've already saved
+
+Ask whether they want their past TikTok favorites in the sheet too. If yes:
+
+1. In TikTok: **Profile → ☰ → Settings and privacy → Account → Download your data**. Pick **JSON** as the format, select **All data**, and tap **Request data**. It's usually ready within a few minutes to a day; they'll get a notification, then download the zip from the same screen (the **Download data** tab).
+2. Have them put the zip in this folder, or tell you where it is. Unzip it into its own new folder and find `user_data_tiktok.json`. Only read the favorites part; the file also holds their DMs, which you don't need.
+3. Preview first: `node scripts/import-tiktok.mjs <path to user_data_tiktok.json> --url https://<their-app>.vercel.app --dry-run`. Tell them how many favorites there are per year.
+4. Cost check before sending: each TikTok uses about half a cent to a cent of Apify's free $5 a month, so around 500 fit in a month. Suggest starting with the newest, e.g. `--since 2025-01-01`, or a quick `--limit 10` test they can look at first.
+5. Run it without `--dry-run`. It sends one at a time, newest first, keeps the date they favorited each one, skips deleted videos and just-for-fun posts, and stops by itself on errors like running out of Apify credit. Running the same command again later continues where it stopped.
 
 ---
 
@@ -144,6 +155,8 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 | Failed: `Could not download the video (403)` | Very rare; the video link expired | Share it again. |
 | Failed: `Apify 402` or a credits message | The month's free Apify credit is used up | Wait for next month, or add credit at apify.com. |
 | Failed: `Gemini 429` | Free-tier rate limit (too many saves at once) | Wait a minute and share again. |
+| "Skipped: just for fun" | Gemini judged the post to be only entertainment, so no row was added | Expected. If it got one wrong, there's no override yet; sharing again will usually give the same answer. |
+| Failed: `Found nothing to save in this post` | Gemini couldn't find a place, recipe or tip, but wasn't sure it was just for fun | Usually nothing to fix. Delete the Failed row if they don't care about it. |
 | Failed: `Timed out after 240s` | A slow scrape or long video | Share again. |
 | A place has no address or coordinates | No `PLACES_API_KEY` (optional), or Places couldn't find it | Expected without Places. Otherwise the Maps link still works. |
 | Shortcut shows nothing or an error page | Wrong URL in the Shortcut | It must be the app address followed by `/api/share`. |
