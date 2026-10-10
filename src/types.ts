@@ -20,6 +20,7 @@ export interface PipelineParams {
   platform: Platform;
   savedAt: string; // ISO timestamp of the share
   lists: Lists; // idea topics and place types, from the sheet's tabs
+  note?: string; // goes in the notes column, e.g. the collection an import came from
 }
 
 export interface PipelineResult {
@@ -34,6 +35,8 @@ export interface Post {
   caption: string;
   creator: string;
   videoUrl: string;
+  /** Photos and carousel slides (TikTok photo mode too). Read when the caption is not enough. */
+  imageUrls: string[];
   thumbnailUrl: string;
 }
 

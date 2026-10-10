@@ -17,6 +17,7 @@ function gemini(result: unknown) {
 function fakeServices(opts: { caption: string; captionParse: unknown; videoParse?: unknown; apifyItem?: unknown }) {
   const sheetWrites: any[] = [];
   const calls: string[] = [];
+  const geminiBodies: any[] = [];
   let geminiCalls = 0;
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
     const url = String(input);
@@ -25,10 +26,15 @@ function fakeServices(opts: { caption: string; captionParse: unknown; videoParse
     if (url.includes('/actor-runs/')) return ok({ data: { status: 'SUCCEEDED' } });
     if (url.includes('/datasets/'))
       return ok([opts.apifyItem ?? { caption: opts.caption, ownerUsername: 'chef', videoUrl: 'https://cdn/v.mp4', displayUrl: 'https://cdn/t.jpg' }]);
+    if (url.startsWith('https://cdn/img')) {
+      if (url.includes('broken')) return new Response('nope', { status: 404 });
+      return new Response(new Uint8Array([9, 9]), { headers: { 'content-type': 'image/png' } });
+    }
     if (url === 'https://cdn/v.mp4') return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'video/mp4' } });
     if (url.includes('/upload/v1beta/files')) return new Response('{}', { headers: { 'x-goog-upload-url': 'https://upload.test/1' } });
     if (url === 'https://upload.test/1') return ok({ file: { name: 'files/1', uri: 'https://g/files/1', state: 'ACTIVE', mimeType: 'video/mp4' } });
     if (url.includes('/v1beta/files/1')) return ok({});
+    if (url.includes(':generateContent')) geminiBodies.push(JSON.parse(String(init?.body)));
     if (url.includes(':generateContent')) return gemini(geminiCalls++ === 0 ? opts.captionParse : opts.videoParse);
     if (url.includes('places.googleapis.com'))
       return ok({ places: [{ id: 'PID', formattedAddress: '1 Main St', location: { latitude: 40, longitude: -73 } }] });
@@ -39,7 +45,7 @@ function fakeServices(opts: { caption: string; captionParse: unknown; videoParse
     }
     throw new Error(`unexpected fetch ${url}`);
   });
-  return { sheetWrites, calls, geminiCalls: () => geminiCalls };
+  return { sheetWrites, calls, geminiBodies, geminiCalls: () => geminiCalls };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -114,6 +120,57 @@ describe('runPipeline', () => {
     expect(svc.sheetWrites[0].rows[0]).toMatchObject({
       ingredients: '• pasta\n• garlic', steps: '1. boil\n2. toss', servings: '2', time: '15 min',
     });
+  });
+
+  it('reads a carousel\'s images when the caption is not enough', async () => {
+    const svc = fakeServices({
+      caption: '5 money tips 👇',
+      apifyItem: { caption: '5 money tips 👇', ownerUsername: 'mm', type: 'Sidecar', images: ['https://cdn/img1', 'https://cdn/img-broken', 'https://cdn/img3'] },
+      captionParse: { needs_video: true, items: [] },
+      videoParse: { needs_video: false, items: [{ type: 'idea', title: 'Money tips', summary: 's', confidence: 0.9, idea: { topic: 'Other', suggested_topic: 'Finance', takeaways: ['save'], mentioned: [] } }] },
+    });
+    const result = await runPipeline(env, params);
+    expect(result.message).toMatch(/Money tips/);
+    expect(svc.calls.some((u) => u.includes('upload'))).toBe(false); // no video to upload
+    const parts = svc.geminiBodies[1].contents[0].parts;
+    expect(parts.filter((p: any) => p.inlineData)).toEqual([
+      { inlineData: { mimeType: 'image/png', data: 'CQk=' } },
+      { inlineData: { mimeType: 'image/png', data: 'CQk=' } },
+    ]);
+    expect(parts.at(-1).text).toMatch(/2 image\(s\)/);
+  });
+
+  it('sends the video and the images together for a mixed carousel', async () => {
+    const svc = fakeServices({
+      caption: 'outfits',
+      apifyItem: { caption: 'outfits', ownerUsername: 'mm', type: 'Sidecar', videoUrl: 'https://cdn/v.mp4', childPosts: [{ type: 'Video', displayUrl: 'https://cdn/cover' }, { type: 'Image', displayUrl: 'https://cdn/img2' }] },
+      captionParse: { needs_video: true, items: [] },
+      videoParse: { needs_video: false, items: [{ type: 'idea', title: 'Outfits', summary: 's', confidence: 0.9, idea: { topic: 'Clothing', suggested_topic: '', takeaways: ['x'], mentioned: [] } }] },
+    });
+    await runPipeline(env, params);
+    const parts = svc.geminiBodies[1].contents[0].parts;
+    expect(parts[0].fileData).toBeDefined();
+    expect(parts.filter((p: any) => p.inlineData)).toHaveLength(1);
+  });
+
+  it('fails clearly when none of the images download and the caption had nothing', async () => {
+    const svc = fakeServices({
+      caption: '',
+      apifyItem: { caption: '', ownerUsername: 'mm', type: 'Image', displayUrl: 'https://cdn/img-broken' },
+      captionParse: {},
+    });
+    const result = await runPipeline(env, params);
+    expect(result.message).toBe("Couldn't save: Could not download the images");
+    expect(svc.sheetWrites[0].rows[0].type).toBe('failed');
+  });
+
+  it('puts an import\'s note in the notes column of the saved rows only', async () => {
+    const svc = fakeServices({
+      caption: 'Best tacos: Veracruz in Austin',
+      captionParse: { needs_video: false, items: [{ type: 'place', title: 'Veracruz', summary: 'tacos', confidence: 0.9, place: { name: 'Veracruz', city: 'Austin', category: 'restaurant', what_to_order: '' } }] },
+    });
+    await runPipeline(env, { ...params, note: 'IG collection: Food' });
+    expect(svc.sheetWrites[0].rows[0]).toMatchObject({ title: 'Veracruz', notes: 'IG collection: Food' });
   });
 
   it('writes a failed row for a private post', async () => {

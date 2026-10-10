@@ -128,15 +128,19 @@ Finish with a short tour in plain words:
 - Sharing the same post twice says "Already saved".
 - Posts that are just for fun (jokes, memes, skits) say "Skipped: just for fun" and add no row.
 
-### Step 9 (optional): Bring in the TikToks they've already saved
+### Step 9 (optional): Bring in what they've already saved
 
-Ask whether they want their past TikTok favorites in the sheet too. If yes:
+Ask whether they want their past TikTok favorites and Instagram saved posts in the sheet too. If yes, have them request their data (it takes minutes to a day, so they can do this first and come back):
 
-1. In TikTok: **Profile → ☰ → Settings and privacy → Account → Download your data**. Pick **JSON** as the format, select **All data**, and tap **Request data**. It's usually ready within a few minutes to a day; they'll get a notification, then download the zip from the same screen (the **Download data** tab).
-2. Have them put the zip in this folder, or tell you where it is. Unzip it into its own new folder and find `user_data_tiktok.json`. Only read the favorites part; the file also holds their DMs, which you don't need.
-3. Preview first: `node scripts/import-tiktok.mjs <path to user_data_tiktok.json> --url https://<their-app>.vercel.app --dry-run`. Tell them how many favorites there are per year.
-4. Cost check before sending: each TikTok uses about half a cent to a cent of Apify's free $5 a month, so around 500 fit in a month. Suggest starting with the newest, e.g. `--since 2025-01-01`, or a quick `--limit 10` test they can look at first.
-5. Run it without `--dry-run`. It sends one at a time, newest first, keeps the date they favorited each one, skips deleted videos and just-for-fun posts, and stops by itself on errors like running out of Apify credit. Running the same command again later continues where it stopped.
+- **TikTok:** **Profile → ☰ → Settings and privacy → Account → Download your data**. Pick **JSON**, select **All data**, and tap **Request data**. When it's ready, download the zip from the **Download data** tab.
+- **Instagram:** **Settings → Accounts Center → Your information and permissions → Download your information → Download or transfer information** → their Instagram account → **Some of your information** → tick only **Saved** → **Download to device** → Date range **All time**, Format **JSON** → **Create files**. Instagram emails them when it's ready.
+
+Then:
+
+1. Have them put the zips in this folder, or tell you where they are. Unzip each into its own new folder. For TikTok, only read the favorites part of `user_data_tiktok.json`; the file also holds their DMs, which you don't need.
+2. Preview: `node scripts/import-saves.mjs <tiktok json> <instagram folder> --dry-run`. Pass whichever exports they have. Tell them how many saves there are per year, and which Instagram collections they're in (those go in the notes column).
+3. Cost check before sending: each TikTok uses about half a cent to a cent of Apify's free $5 a month and each Instagram post about a third of a cent, so roughly 500 TikToks or 1,500 posts fit in a month. Suggest starting with the newest, e.g. `--since 2025-01-01`, or a quick `--limit 10` test they can look at first.
+4. Run it with `--url https://<their-app>.vercel.app` and without `--dry-run`. It sends one at a time, newest first, keeps the date they saved each one, skips deleted posts and just-for-fun ones, and stops by itself on errors like running out of Apify credit. Running the same command again later continues where it stopped.
 
 ---
 

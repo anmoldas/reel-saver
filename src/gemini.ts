@@ -144,18 +144,62 @@ export function parseCaption(env: Env, lists: Lists, post: Post): Promise<ParseR
   return generate(env, lists, [{ text: postContext(post) }]);
 }
 
-export function parseVideo(
-  env: Env,
-  lists: Lists,
-  post: Post,
-  file: { uri: string; mimeType: string },
-): Promise<ParseResult> {
+export interface Media {
+  /** An uploaded video (or a slideshow's audio). */
+  file?: { uri: string; mimeType: string };
+  /** Photos or slides, in order. */
+  images: InlineImage[];
+}
+
+export interface InlineImage {
+  mimeType: string;
+  data: string; // base64
+}
+
+/** Reads the post with its video and/or images. */
+export function parseMedia(env: Env, lists: Lists, post: Post, media: Media): Promise<ParseResult> {
+  const what = [media.file ? 'the video (speech, on-screen text and visuals)' : '', media.images.length ? `the ${media.images.length} image(s), in order (text on them, products, places)` : '']
+    .filter(Boolean)
+    .join(' and ');
   return generate(env, lists, [
-    { fileData: { mimeType: file.mimeType, fileUri: file.uri } },
-    {
-      text: `${postContext(post)}\n\nUse the video (speech, on-screen text and visuals) together with the caption. needs_video should be false now.`,
-    },
+    ...(media.file ? [{ fileData: { mimeType: media.file.mimeType, fileUri: media.file.uri } }] : []),
+    ...media.images.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.data } })),
+    { text: `${postContext(post)}\n\nUse ${what} together with the caption. needs_video should be false now.` },
   ]);
+}
+
+const MAX_IMAGE_BYTES = 7 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES = 15 * 1024 * 1024; // Gemini caps a whole request at 20MB
+
+/** Files the scraper stored in Apify need the token: new Apify accounts keep storage private. */
+function apifyAuth(env: Env, url: string): RequestInit | undefined {
+  return new URL(url).hostname === 'api.apify.com' ? { headers: { Authorization: `Bearer ${env.APIFY_TOKEN}` } } : undefined;
+}
+
+/** Downloads images for Gemini. Skips any that fail or are too big; returns what it got, in order. */
+export async function downloadImages(env: Env, urls: string[]): Promise<InlineImage[]> {
+  const got = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const res = await fetch(url, apifyAuth(env, url));
+        if (!res.ok) return null;
+        const type = (res.headers.get('content-type') || '').split(';')[0];
+        const bytes = await res.arrayBuffer();
+        if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return null;
+        return { mimeType: type.startsWith('image/') ? type : 'image/jpeg', data: Buffer.from(bytes).toString('base64'), size: bytes.byteLength };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const out: InlineImage[] = [];
+  let total = 0;
+  for (const img of got) {
+    if (!img || total + img.size > MAX_TOTAL_IMAGE_BYTES) continue;
+    total += img.size;
+    out.push({ mimeType: img.mimeType, data: img.data });
+  }
+  return out;
 }
 
 /** Why the caption-only result is not good enough, or null if it is. */
@@ -254,15 +298,13 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 /** Downloads the video and uploads it to Gemini. Returns the file handle. */
 export async function uploadVideo(env: Env, videoUrl: string): Promise<{ name: string; uri: string; mimeType: string }> {
-  // Videos the scraper stored in Apify need the token: new Apify accounts keep storage private.
-  const fromApify = new URL(videoUrl).hostname === 'api.apify.com';
-  const dl = await fetch(videoUrl, fromApify ? { headers: { Authorization: `Bearer ${env.APIFY_TOKEN}` } } : undefined);
+  const dl = await fetch(videoUrl, apifyAuth(env, videoUrl));
   if (!dl.ok) throw new Error(`Could not download the video from ${new URL(videoUrl).hostname} (${dl.status})`);
   const bytes = await dl.arrayBuffer();
   if (bytes.byteLength > MAX_VIDEO_BYTES) throw new Error('Video is too large');
-  const mimeType = (dl.headers.get('content-type') || '').startsWith('video/')
-    ? dl.headers.get('content-type')!.split(';')[0]
-    : 'video/mp4';
+  // A photo-mode TikTok's "video" can be its audio track, which Gemini reads too.
+  const type = (dl.headers.get('content-type') || '').split(';')[0];
+  const mimeType = type.startsWith('video/') || type.startsWith('audio/') ? type : 'video/mp4';
 
   const start = await fetch(`${BASE}/upload/v1beta/files`, {
     method: 'POST',

@@ -20,7 +20,8 @@ export function actorInput(platform: Platform, url: string): Record<string, unkn
     // TikTok's cover link is public, so the Apps Script can copy it to Drive; an Apify copy would need the token.
     shouldDownloadCovers: false,
     shouldDownloadSubtitles: false,
-    shouldDownloadSlideshowImages: false,
+    // Photo-mode posts: the slides are read when the caption is not enough.
+    shouldDownloadSlideshowImages: true,
   };
 }
 
@@ -61,6 +62,36 @@ export async function getItems(env: Env, datasetId: string): Promise<any[]> {
   return apify(env, `/datasets/${datasetId}/items?clean=true&limit=5`);
 }
 
+const MAX_IMAGES = 10;
+
+/** Distinct http(s) links, in order, at most MAX_IMAGES. */
+function links(values: unknown[]): string[] {
+  const out: string[] = [];
+  for (const v of values) {
+    if (typeof v === 'string' && /^https?:\/\//.test(v) && !out.includes(v)) out.push(v);
+    if (out.length === MAX_IMAGES) break;
+  }
+  return out;
+}
+
+/** Instagram: a carousel's slides, or the photo itself. Video slides are left to the video step. */
+function instagramImages(item: any): string[] {
+  const children: any[] = Array.isArray(item.childPosts) ? item.childPosts : [];
+  const fromChildren = children.filter((c) => c?.type !== 'Video').map((c) => c?.displayUrl);
+  const images: unknown[] = Array.isArray(item.images) ? item.images : [];
+  if (fromChildren.length || images.length) return links([...fromChildren, ...images]);
+  return item.type === 'Image' ? links([item.displayUrl]) : [];
+}
+
+/** TikTok photo mode: Apify's stored copies first (the TikTok links need cookies), then TikTok's own. */
+function tiktokImages(item: any): string[] {
+  const slides: any[] = Array.isArray(item.slideshowImageLinks) ? item.slideshowImageLinks : [];
+  const stored = links(slides.map((s) => s?.downloadLink));
+  if (stored.length) return stored;
+  const own: any[] = Array.isArray(item.imagePost?.images) ? item.imagePost.images : [];
+  return links([...slides.map((s) => s?.tiktokLink), ...own.map((i) => i?.imageURL?.urlList?.[0])]);
+}
+
 function first(...values: unknown[]): string {
   for (const v of values) {
     if (typeof v === 'string' && v.trim()) return v.trim();
@@ -81,6 +112,7 @@ export function normalizeItem(platform: Platform, items: any[]): Post {
       caption: first(item.caption),
       creator: first(item.ownerUsername, item.owner?.username),
       videoUrl: first(item.videoUrl),
+      imageUrls: instagramImages(item),
       thumbnailUrl: first(item.displayUrl, item.images?.[0], item.thumbnailUrl),
     };
   }
@@ -88,6 +120,7 @@ export function normalizeItem(platform: Platform, items: any[]): Post {
     caption: first(item.text, item.desc),
     creator: first(item.authorMeta?.name, item.authorMeta?.nickName, item.author?.uniqueId),
     videoUrl: first(item.mediaUrls?.[0], item.videoMeta?.downloadAddr, item.videoUrl),
+    imageUrls: tiktokImages(item),
     thumbnailUrl: first(item.videoMeta?.originalCoverUrl, item.videoMeta?.coverUrl, item.covers?.[0], item.coverUrl),
   };
 }
