@@ -18,11 +18,11 @@ async function call(env: Env, payload: Record<string, unknown>): Promise<any> {
   return data;
 }
 
-/** Is this URL already saved (ignoring failed rows)? Also returns the Topics tab. */
+/** Is this URL already saved (ignoring failed rows)? Also returns the Topics and Place types tabs. */
 export async function findExisting(
   env: Env,
   sourceUrl: string,
-): Promise<{ exists: boolean; title?: string; type?: string; topics?: string[] }> {
+): Promise<{ exists: boolean; title?: string; type?: string; topics?: string[]; place_types?: string[] }> {
   return call(env, { action: 'check', source_url: sourceUrl });
 }
 

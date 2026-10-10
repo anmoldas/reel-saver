@@ -5,7 +5,7 @@ import { errorMessage } from '../src/errors.js';
 import { runPipeline } from '../src/pipeline.js';
 import { failedRow } from '../src/rows.js';
 import { findExisting, writeRows } from '../src/sheet.js';
-import { topicList } from '../src/topics.js';
+import { lists as listsFrom } from '../src/topics.js';
 import { extractUrl, resolvePostUrl } from '../src/urls.js';
 
 const json = (body: unknown, status = 200) =>
@@ -68,11 +68,11 @@ async function handle(request: Request): Promise<Response> {
   }
   const { url, platform } = resolved;
 
-  let topics = topicList(null);
+  let lists = listsFrom();
   try {
     const existing = await findExisting(env, url);
     if (existing.exists) return json({ ok: true, duplicate: true, message: `Already saved: ${existing.title ?? url}` });
-    topics = topicList(existing.topics);
+    lists = listsFrom(existing.topics, existing.place_types);
   } catch (err) {
     console.log(`[reel-saver] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
@@ -84,7 +84,7 @@ async function handle(request: Request): Promise<Response> {
   }
 
   // Keep running after we answer; wait briefly so fast saves get a real confirmation.
-  const work = runPipeline(env, { url, platform, savedAt, topics });
+  const work = runPipeline(env, { url, platform, savedAt, lists });
   waitUntil(work);
   const quick = await Promise.race([
     work,

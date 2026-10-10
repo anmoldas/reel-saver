@@ -81,12 +81,12 @@ one tab per kind of save. columns are matched by name, so you can reorder them o
 
 | tab | what lands there | columns |
 |---|---|---|
-| **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, creator, source_url, thumbnail_url, notes` |
+| **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, specialty, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, creator, source_url, thumbnail_url, notes` |
 | **Recipes** | anything you'd cook | `saved_at, done, title, summary, time, servings, ingredients, steps, creator, source_url, thumbnail_url, notes` |
 | **Ideas** | everything else: tips, advice, how-tos, products, outfits, tools | `saved_at, done, topic, title, summary, takeaways, mentioned, suggested_topic, creator, source_url, thumbnail_url, notes` |
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
-- place `category` is one of: food, cafe, bar, shop, sight, activity, stay, other. `country` lets you filter a trip (Japan, Netherlands…).
+- place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it names.
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
 
@@ -96,6 +96,12 @@ the **Topics** tab lists the idea topics (Travel tips, Clothing, Career, AI, Vid
 
 - **to add a topic**, add a row to the Topics tab. the next save uses it; no redeploy.
 - **to find new topics**, filter Ideas to `topic = Other` now and then. the `suggested_topic` column says what Gemini would have called each one. if the same suggestion keeps appearing, add it to Topics.
+
+### place types
+
+the **Place types** tab lists the place categories: restaurant, cafe, bar, bakery & dessert, home & ceramics, clothing, beauty, books & stationery, market, museum & gallery, sight, activity, stay. Gemini must pick one or "other", so a pottery shop, a ceramics store and a home decor shop all land in **home & ceramics**, and the dashboard can group on `category` without its own mapping. add a row to add a type.
+
+places saved before this list existed have free-text categories. run `recategorizePlaces` once from the editor: it moves the old wording to `specialty`, guesses the type from keywords, and logs any it set to "other" so you can fix those by hand.
 
 ### moving from the old single tab
 

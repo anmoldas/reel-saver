@@ -3,7 +3,7 @@ import { normalizeItem } from '../src/apify.js';
 import { PermanentError } from '../src/errors.js';
 import { needsVideo, normalizeParse } from '../src/gemini.js';
 import { countryFromAddress, itemRow, summarize } from '../src/rows.js';
-import { DEFAULT_TOPICS, topicList } from '../src/topics.js';
+import { DEFAULT_PLACE_TYPES, DEFAULT_TOPICS, lists, placeTypeList, topicList } from '../src/topics.js';
 
 describe('normalizeItem', () => {
   it('maps Instagram fields', () => {
@@ -59,7 +59,6 @@ describe('normalizeParse and needsVideo', () => {
   });
 
   it('matches topics from the sheet and keeps invented ones as suggestions', () => {
-    const topics = ['Clothing', 'AI', 'Other'];
     const r = normalizeParse(
       {
         items: [
@@ -68,7 +67,7 @@ describe('normalizeParse and needsVideo', () => {
           { type: 'idea', title: 'c', idea: { topic: 'Other', suggested_topic: 'Skincare' } },
         ],
       },
-      topics,
+      lists(['Clothing', 'AI']),
     );
     expect(r.items.map((i) => [i.idea?.topic, i.idea?.suggested_topic])).toEqual([
       ['Clothing', ''],
@@ -85,6 +84,25 @@ describe('topicList', () => {
 
   it('falls back to the defaults when the sheet has none', () => {
     expect(topicList(undefined)).toEqual([...DEFAULT_TOPICS, 'Other']);
+    expect(placeTypeList([])).toEqual([...DEFAULT_PLACE_TYPES, 'other']);
+  });
+});
+
+describe('place types', () => {
+  it('maps a category onto the sheet list; an invented one becomes the specialty', () => {
+    const r = normalizeParse(
+      {
+        items: [
+          { type: 'place', title: 'A', place: { name: 'A', category: 'Home & Ceramics', specialty: 'pottery shop' } },
+          { type: 'place', title: 'B', place: { name: 'B', category: 'ceramics and glassware store' } },
+        ],
+      },
+      lists(undefined, ['home & ceramics', 'cafe']),
+    );
+    expect(r.items.map((i) => [i.place?.category, i.place?.specialty])).toEqual([
+      ['home & ceramics', 'pottery shop'],
+      ['other', 'ceramics and glassware store'],
+    ]);
   });
 });
 
@@ -93,12 +111,12 @@ describe('rows', () => {
 
   it('writes a place row with enrichment, taking the country from the address', () => {
     const [item] = normalizeParse({
-      items: [{ type: 'place', title: 'Joe', summary: 's', confidence: 1, place: { name: 'Joe', city: 'Tokyo', category: 'Food', what_to_order: 'slice' } }],
+      items: [{ type: 'place', title: 'Joe', summary: 's', confidence: 1, place: { name: 'Joe', city: 'Tokyo', category: 'Restaurant', specialty: 'pizza by the slice', what_to_order: 'slice' } }],
     }).items;
     const row = itemRow(base, item, { placeId: 'P1', address: '1-2 Shibuya, Tokyo 150-0002, Japan', lat: 1, lng: 2, mapsUrl: 'https://m' });
     expect(row).toMatchObject({
       type: 'place', title: 'Joe', city: 'Tokyo', country: 'Japan', address: '1-2 Shibuya, Tokyo 150-0002, Japan',
-      lat: 1, lng: 2, maps_url: 'https://m', place_id: 'P1', category: 'food', what_to_order: 'slice', creator: '@c',
+      lat: 1, lng: 2, maps_url: 'https://m', place_id: 'P1', category: 'restaurant', specialty: 'pizza by the slice', what_to_order: 'slice', creator: '@c',
     });
   });
 
@@ -109,7 +127,7 @@ describe('rows', () => {
           { type: 'idea', title: 'Editing', confidence: 1, idea: { topic: 'Video editing', takeaways: ['Cut on beat', 'Use J-cuts'], mentioned: ['CapCut', 'Premiere'] } },
         ],
       },
-      ['Video editing', 'Other'],
+      lists(['Video editing']),
     ).items;
     expect(itemRow(base, item)).toMatchObject({
       type: 'idea', topic: 'Video editing', suggested_topic: '', takeaways: '• Cut on beat\n• Use J-cuts', mentioned: 'CapCut, Premiere',

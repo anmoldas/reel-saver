@@ -1,3 +1,5 @@
+import type { Lists } from './topics.js';
+
 export type Platform = 'instagram' | 'tiktok';
 
 export interface Env {
@@ -17,7 +19,7 @@ export interface PipelineParams {
   url: string; // canonical post URL
   platform: Platform;
   savedAt: string; // ISO timestamp of the share
-  topics: string[]; // idea topics, from the sheet's Topics tab
+  lists: Lists; // idea topics and place types, from the sheet's tabs
 }
 
 export interface PipelineResult {
@@ -41,7 +43,7 @@ export interface ParsedItem {
   summary: string;
   confidence: number;
   recipe: { ingredients: string[]; steps: string[]; servings: string; time: string } | null;
-  place: { name: string; city: string; country: string; category: string; what_to_order: string } | null;
+  place: { name: string; city: string; country: string; category: string; specialty: string; what_to_order: string } | null;
   idea: { topic: string; suggested_topic: string; takeaways: string[]; mentioned: string[] } | null;
 }
 
