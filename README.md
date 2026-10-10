@@ -1,6 +1,6 @@
 # reel saver
 
-tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, products) with the key takeaways and a shopping list of everything recommended.
+tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways. every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
 
 <!-- TODO screenshot: the sheet (Places / Ideas / Mentions tabs) next to the phone notification "Saved place: …" -->
 
@@ -40,21 +40,21 @@ for a few saves a day, $0. rough numbers per save:
 | Places text search (optional) | ~$0.03 | 5,000/month free |
 | Vercel, Apps Script | 0 | free |
 
-so roughly 500 tiktoks or 1,500 reels a month before Apify's free credit runs out. if it does, saves fail with a note in the **Failed** tab until the next month.
+so roughly 500 tiktoks or 1,500 instagram posts a month before Apify's free credit runs out. if it does, saves fail with a note in the **Failed** tab until the next month.
 
 ## how it decides
 
-- **caption first for places and recipes.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
-- **ideas always watch the video.** tips and advice are usually spoken, and the caption is just a teaser, so any post read as an idea is re-read with the video.
-- **photos and carousels** are read the same way: if the caption isn't enough, Gemini looks at the images (up to 10 slides), including any text on them. a carousel with a video slide gets both. tiktok photo-mode slideshows too.
+- **caption first.** Gemini reads the caption and decides whether the post is a place, a recipe, an idea or just for fun.
+- **then the video, when the caption isn't enough.** for places and recipes that's when Gemini asks for it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7). ideas always get the video, because tips are usually spoken and the caption is just a teaser.
+- **photos and carousels** work the same way, with the images instead of a video: up to 10 slides, including any text on them. a carousel with a video slide gets both, and tiktok photo slideshows count too.
 - **several places in one post** become one row each.
 - **just for fun is skipped.** jokes, memes, skits, pets and vlogs with nothing to visit, cook, buy or learn get "Skipped: just for fun" and no row. if the caption can't tell, it watches the video first. a funny post that still names a place, product or tip is saved.
-- **duplicates**: links are normalised (`instagram.com/share/...`, `vm.tiktok.com/...`, `?igsh=` all collapse to one URL). if a non-failed row already exists you get "Already saved: X" and nothing runs.
+- **duplicates**: share links are cleaned up first (`instagram.com/share/...`, `vm.tiktok.com/...` and `?igsh=` all point to the same post), so sharing a post twice says "Already saved: X" and nothing runs. failed saves are the exception: sharing again retries them.
 - **thumbnails** are copied to a `Reel Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
 
 ## the sheet
 
-one tab per kind of save, newest at the top: every save re-sorts its tab by `saved_at`, so imported old posts land in date order. columns are matched by name, so you can reorder them or add your own. (sheets from before this was added: run `sortAllTabs` once from the Apps Script editor.)
+one tab per kind of save, newest at the top. every save re-sorts its tab by `saved_at`, so imported old posts land in date order too. columns are matched by name, so you can reorder them or add your own.
 
 | tab | what lands there | columns |
 |---|---|---|
@@ -67,33 +67,36 @@ one tab per kind of save, newest at the top: every save re-sorts its tab by `sav
 - place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
+- **older sheets:** run `sortAllTabs` once to put existing rows newest first.
+
+notes marked **older sheets** are one-time fixes for sheets made before a feature was added; a new sheet doesn't need them. functions like `sortAllTabs` run from the Apps Script editor: pick the function in the dropdown and click Run.
 
 ### mentions
 
-every thing an idea recommends gets one row in **Mentions**: a shopping and to-try list across all your saves. when another save recommends the same thing, it's added to that row instead of making a new one.
+everything an idea recommends gets one row in **Mentions**: a shopping and to-try list across all your saves. when another save recommends the same thing, it's added to that row instead of making a new one.
 
-- `kind` is one of product, app/tool, brand, store, book, show/movie, course, person. `why` is one line on why it was recommended; `price` is filled only when the video says one.
+- `kind` is one of product, app/tool, brand, store, book, show/movie, course, person. `why` is one line on why it was recommended (from the first save that mentioned it); `price` is filled only when the video says one.
 - `shop_link` is a Google Shopping search for products and brands, and a web search for everything else.
 - `status` is a dropdown (want, bought, tried, skip); `notes` is yours.
-- `times_mentioned` counts the saves that recommend it, so something three creators recommend stands out. `from`, `creator` and `source_url` list each of those saves, one per line. `why` keeps the first save's reason.
+- `times_mentioned` counts the saves that recommend it, so something three creators recommend stands out. `from`, `creator` and `source_url` list each of those saves, one per line.
 - names match loosely: case, accents and punctuation don't matter, and "Glaze Drops" by Kérastase matches "Kerastase Glaze Drops". a brand on its own ("Muji") stays separate from its products ("Muji Lip Essence").
 - places don't go here (they're in Places), and neither does anything the creator criticised, a giveaway prize or a credited source.
-- **tidying up older rows** (from before grouping and the stricter rules): `node scripts/clean-mentions.mjs --url https://YOUR-APP.vercel.app` asks Gemini to review every row and shows what it would remove, re-kind and merge, without changing anything. add `--apply` to do exactly that; the tab is copied to `Mentions (backup)` first. to only merge duplicates, run `mergeDuplicateMentions` from the Apps Script editor. don't run either while an import is going.
-- ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once from the editor to turn those into rows (kind, brand, why and price stay empty for them).
+- **older sheets:** ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once to turn those into rows (kind, brand, why and price stay empty for them).
+- **older sheets:** to tidy rows from before grouping and the stricter rules, run `node scripts/clean-mentions.mjs --url https://YOUR-APP.vercel.app`. it asks Gemini to review every row and shows what it would remove, re-kind and merge, without changing anything. add `--apply` to do exactly that; the tab is copied to `Mentions (backup)` first. to only merge duplicates, run `mergeDuplicateMentions`. don't run either while an import is going.
 
 ### topics
 
 the **Topics** tab lists the idea topics (Travel tips, Clothing, Career, AI, Video editing, Journaling, Organization to start). Gemini must pick one of them or "Other".
 
 - **to add a topic**, add a row to the Topics tab. the next save uses it; no redeploy.
-- **after adding a topic**, run `applyNewTopics` from the Apps Script editor: ideas under "Other" whose `suggested_topic` matches it move over, and their Mentions rows follow.
+- **after adding a topic**, run `applyNewTopics` from the Apps Script editor to move ideas already saved under "Other" whose `suggested_topic` matches it. their Mentions rows follow.
 - **to find new topics**, filter Ideas to `topic = Other` now and then. the `suggested_topic` column says what Gemini would have called each one. if the same suggestion keeps appearing, add it to Topics.
 
 ### place types
 
-the **Place types** tab lists the place categories: restaurant, cafe, bar, bakery & dessert, home & ceramics, clothing, beauty, books & stationery, market, museum & gallery, sight, activity, stay. Gemini must pick one or "other", so a pottery shop, a ceramics store and a home decor shop all land in **home & ceramics**, and the dashboard can group on `category` without its own mapping. add a row to add a type.
+the **Place types** tab lists the place categories: restaurant, cafe, bar, bakery & dessert, home & ceramics, clothing, beauty, books & stationery, market, museum & gallery, sight, activity, stay. Gemini must pick one or "other", so a pottery shop, a ceramics store and a home decor shop all land in **home & ceramics**, which makes `category` easy to filter on. add a row to add a type.
 
-places saved before this list existed have free-text categories. run `recategorizePlaces` once from the editor: it moves the old wording to `specialty`, guesses the type from keywords, and logs any it set to "other" so you can fix those by hand.
+**older sheets:** places saved before this list existed have free-text categories. run `recategorizePlaces` once: it moves the old wording to `specialty`, guesses the type from keywords, and logs any it set to "other" so you can fix those by hand.
 
 ### moving from the old single tab
 
@@ -112,7 +115,7 @@ then:
 node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https://YOUR-APP.vercel.app --since 2025-01-01
 ```
 
-it sends everything newest first, one at a time, waiting for each save to finish, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.import-progress.json`). the SECRET is read from `.env.local`. at about half a cent to a cent per TikTok and a third of a cent per Instagram post, around 500 TikToks or 1,500 posts fit in Apify's free $5 a month; for more, spread runs across months.
+it sends everything newest first, one at a time, waiting for each save to finish, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.import-progress.json`). the SECRET is read from `.env.local`. costs are the same as normal saves (see [what it costs](#what-it-costs)): around 500 TikToks or 1,500 Instagram posts fit in Apify's free $5 a month, so for more, spread runs across months or start with `--since`.
 
 ## how it works
 
@@ -139,7 +142,7 @@ the same steps Claude Code follows. you'll also need to make up one long random 
 | Places key (optional) | console.cloud.google.com → new project → enable **Places API (New)** → Credentials → Create API key | adds address, coordinates and an exact Maps pin. under "API restrictions" pick Places API (New) only. needs a billing account, but 5,000 lookups a month are free. without it, places save with a Maps search link |
 | Vercel | vercel.com | free Hobby plan |
 
-### 2. sheet + apps script (build step 1)
+### 2. sheet + apps script
 
 1. create a new google sheet.
 2. Extensions → Apps Script. delete what's there and paste in `apps-script/Code.gs`.
@@ -156,7 +159,7 @@ the same steps Claude Code follows. you'll also need to make up one long random 
 3. Environment Variables: add `SECRET`, `APIFY_TOKEN`, `GEMINI_API_KEY`, `SHEET_URL`, and `PLACES_API_KEY` if you have one. the rest of `.env.example` is optional.
 4. Deploy. your endpoint is `https://<project>.vercel.app/api/share`.
 
-test it with a stub row (build step 2, which skips Apify and Gemini):
+test it with a stub row, which skips Apify and Gemini:
 
 ```sh
 curl -X POST https://<project>.vercel.app/api/share \
@@ -169,7 +172,7 @@ then a real one (drop `"stub":true` and use a real reel or tiktok link). logs ar
 ### 4. iOS shortcut
 
 1. Shortcuts app → + → name it **Save to Sheet**.
-2. tap the ⓘ (details) → turn on **Show in Share Sheet**. under the share sheet types, keep only **URLs** and **Text**.
+2. tap the ⓘ (details) → turn on **Show in Share Sheet**. under the share sheet types, keep only **URLs** and **Text**, and set **If there's no input** to **Get Clipboard**.
 3. add **Get Contents of URL**:
    - URL: `https://<project>.vercel.app/api/share`
    - Method: POST
