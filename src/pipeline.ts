@@ -1,6 +1,6 @@
 import { getItems, normalizeItem, startRun, waitForRun } from './apify.js';
 import { errorMessage } from './errors.js';
-import { deleteVideo, needsVideo, parseCaption, parseVideo, uploadVideo } from './gemini.js';
+import { deleteVideo, downloadImages, needsVideo, parseCaption, parseMedia, uploadVideo, type Media } from './gemini.js';
 import { findPlace } from './places.js';
 import { failedRow, itemRow, mentionRows, summarize } from './rows.js';
 import { writeRows } from './sheet.js';
@@ -43,9 +43,37 @@ export async function runPipeline(env: Env, params: PipelineParams, deadlineMs =
   }
 }
 
+/**
+ * Uploads the video and downloads the images, then reads them together with the caption.
+ * Either one failing is fine as long as the other worked; returns null when there was nothing to read.
+ */
+async function readMedia(env: Env, lists: PipelineParams['lists'], post: Post, url: string): Promise<ParseResult | null> {
+  const [file, images] = await Promise.all([
+    post.videoUrl
+      ? uploadVideo(env, post.videoUrl).catch((err) => {
+          if (!post.imageUrls.length) throw err;
+          log(url, `video failed, using images only: ${errorMessage(err)}`);
+          return undefined;
+        })
+      : Promise.resolve(undefined),
+    downloadImages(env, post.imageUrls),
+  ]);
+  if (post.imageUrls.length) log(url, `read ${images.length} of ${post.imageUrls.length} images`);
+  const media: Media = { file, images };
+  try {
+    if (!file && !images.length) {
+      if (post.imageUrls.length) throw new Error('Could not download the images');
+      return null;
+    }
+    return await parseMedia(env, lists, post, media);
+  } finally {
+    if (file) await deleteVideo(env, file.name);
+  }
+}
+
 async function runSteps(
   env: Env,
-  { url, platform, savedAt, lists }: PipelineParams,
+  { url, platform, savedAt, lists, note }: PipelineParams,
   state: { abandoned: boolean },
   onPost: (p: Post) => void,
 ): Promise<PipelineResult> {
@@ -58,23 +86,18 @@ async function runSteps(
   onPost(post);
   log(url, `fetched @${post.creator}, caption ${post.caption.length} chars, video ${post.videoUrl ? 'yes' : 'no'}`);
 
-  // 2. Parse: caption first, video only when the caption is not enough
+  // 2. Parse: caption first, then the video and/or images only when the caption is not enough
   let result: ParseResult | null = post.caption ? await parseCaption(env, lists, post) : null;
   const reason = result ? needsVideo(result, env.CONFIDENCE_THRESHOLD) : 'no caption';
-  if (reason && post.videoUrl) {
-    log(url, `using video: ${reason}`);
+  if (reason && (post.videoUrl || post.imageUrls.length)) {
+    log(url, `using media: ${reason}`);
     try {
-      const file = await uploadVideo(env, post.videoUrl);
-      try {
-        const fromVideo = await parseVideo(env, lists, post, file);
-        if (fromVideo.items.length || fromVideo.just_for_fun) result = fromVideo;
-      } finally {
-        await deleteVideo(env, file.name);
-      }
+      const fromMedia = await readMedia(env, lists, post, url);
+      if (fromMedia && (fromMedia.items.length || fromMedia.just_for_fun)) result = fromMedia;
     } catch (err) {
       // Keep the caption result if we have one; otherwise this is a real failure.
       if (!result?.items.length) throw err;
-      log(url, `video fallback failed, keeping caption parse: ${errorMessage(err)}`);
+      log(url, `media fallback failed, keeping caption parse: ${errorMessage(err)}`);
     }
   }
   if (result?.just_for_fun) {
@@ -99,7 +122,10 @@ async function runSteps(
   // 4. Store
   if (state.abandoned) return { ok: false, message: 'abandoned' };
   const base = { savedAt, sourceUrl: url, post };
-  const rows = result.items.flatMap((item, i) => [itemRow(base, item, matches[i]), ...mentionRows(base, item)]);
+  const rows = result.items.flatMap((item, i) => [
+    { ...itemRow(base, item, matches[i]), ...(note ? { notes: note } : {}) },
+    ...mentionRows(base, item),
+  ]);
   const written = await writeRows(env, url, rows);
   if (written.duplicate) return { ok: true, message: 'Already saved' };
 

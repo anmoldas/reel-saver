@@ -9,14 +9,41 @@ describe('normalizeItem', () => {
   it('maps Instagram fields', () => {
     expect(
       normalizeItem('instagram', [{ caption: 'yum', ownerUsername: 'chef', videoUrl: 'https://v', displayUrl: 'https://t' }]),
-    ).toEqual({ caption: 'yum', creator: 'chef', videoUrl: 'https://v', thumbnailUrl: 'https://t' });
+    ).toEqual({ caption: 'yum', creator: 'chef', videoUrl: 'https://v', imageUrls: [], thumbnailUrl: 'https://t' });
+  });
+
+  it('keeps Instagram carousel slides, leaving video slides to the video step', () => {
+    const post = normalizeItem('instagram', [{
+      caption: 'tips', type: 'Sidecar', displayUrl: 'https://s1',
+      childPosts: [{ type: 'Image', displayUrl: 'https://s1' }, { type: 'Video', displayUrl: 'https://v-cover' }, { type: 'Image', displayUrl: 'https://s3' }],
+      images: ['https://s1', 'https://s3'],
+    }]);
+    expect(post.imageUrls).toEqual(['https://s1', 'https://s3']);
+  });
+
+  it('keeps a single Instagram photo, but not a reel cover', () => {
+    expect(normalizeItem('instagram', [{ caption: 'x', type: 'Image', displayUrl: 'https://p' }]).imageUrls).toEqual(['https://p']);
+    expect(normalizeItem('instagram', [{ caption: 'x', type: 'Video', videoUrl: 'https://v', displayUrl: 'https://cover' }]).imageUrls).toEqual([]);
+  });
+
+  it('caps a carousel at 10 images', () => {
+    const images = Array.from({ length: 20 }, (_, i) => `https://s${i}`);
+    expect(normalizeItem('instagram', [{ caption: 'x', type: 'Sidecar', images }]).imageUrls).toHaveLength(10);
+  });
+
+  it('keeps TikTok photo-mode slides, preferring the Apify copies', () => {
+    const post = normalizeItem('tiktok', [{
+      text: 'slides', authorMeta: { name: 'joe' },
+      slideshowImageLinks: [{ tiktokLink: 'https://tt/1', downloadLink: 'https://api.apify.com/1' }, { tiktokLink: 'https://tt/2', downloadLink: 'https://api.apify.com/2' }],
+    }]);
+    expect(post.imageUrls).toEqual(['https://api.apify.com/1', 'https://api.apify.com/2']);
   });
 
   it('maps TikTok fields, preferring the downloaded video', () => {
     const post = normalizeItem('tiktok', [
       { text: 'hi', authorMeta: { name: 'joe' }, mediaUrls: ['https://apify/v.mp4'], videoMeta: { coverUrl: 'https://c' } },
     ]);
-    expect(post).toEqual({ caption: 'hi', creator: 'joe', videoUrl: 'https://apify/v.mp4', thumbnailUrl: 'https://c' });
+    expect(post).toEqual({ caption: 'hi', creator: 'joe', videoUrl: 'https://apify/v.mp4', imageUrls: [], thumbnailUrl: 'https://c' });
   });
 
   it('fails cleanly on private or deleted posts', () => {
@@ -107,7 +134,7 @@ describe('place types', () => {
 });
 
 describe('rows', () => {
-  const base = { savedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://u', post: { caption: '', creator: 'c', videoUrl: '', thumbnailUrl: 't' } };
+  const base = { savedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://u', post: { caption: '', creator: 'c', videoUrl: '', imageUrls: [], thumbnailUrl: 't' } };
 
   it('writes a place row with enrichment, taking the country from the address', () => {
     const [item] = normalizeParse({
@@ -150,7 +177,7 @@ describe('rows', () => {
 });
 
 describe('mentions', () => {
-  const base = { savedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://u', post: { caption: '', creator: 'egg', videoUrl: '', thumbnailUrl: 't' } };
+  const base = { savedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://u', post: { caption: '', creator: 'egg', videoUrl: '', imageUrls: [], thumbnailUrl: 't' } };
   const parsed = normalizeParse(
     {
       items: [

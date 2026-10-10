@@ -18,7 +18,7 @@ open [Claude Code](https://claude.com/claude-code) in an empty folder and say:
 
 > Set up Reel Saver for me by following https://raw.githubusercontent.com/moneymolz/reel-saver/main/SETUP.md
 
-it walks you through each account one step at a time, keeps your keys in a file on your computer instead of the chat, puts the app online, and tests everything. at the end it can also bring in the tiktoks you've already saved. prefer doing it yourself? see [doing it by hand](#doing-it-by-hand).
+it walks you through each account one step at a time, keeps your keys in a file on your computer instead of the chat, puts the app online, and tests everything. at the end it can also bring in the tiktoks and instagram posts you've already saved. prefer doing it yourself? see [doing it by hand](#doing-it-by-hand).
 
 ## your data
 
@@ -46,6 +46,7 @@ so roughly 500 tiktoks or 1,500 reels a month before Apify's free credit runs ou
 
 - **caption first for places and recipes.** Gemini reads the caption. it falls back to the video only if the model says it needs it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7).
 - **ideas always watch the video.** tips and advice are usually spoken, and the caption is just a teaser, so any post read as an idea is re-read with the video.
+- **photos and carousels** are read the same way: if the caption isn't enough, Gemini looks at the images (up to 10 slides), including any text on them. a carousel with a video slide gets both. tiktok photo-mode slideshows too.
 - **several places in one post** become one row each.
 - **just for fun is skipped.** jokes, memes, skits, pets and vlogs with nothing to visit, cook, buy or learn get "Skipped: just for fun" and no row. if the caption can't tell, it watches the video first. a funny post that still names a place, product or tip is saved.
 - **duplicates**: links are normalised (`instagram.com/share/...`, `vm.tiktok.com/...`, `?igsh=` all collapse to one URL). if a non-failed row already exists you get "Already saved: X" and nothing runs.
@@ -94,15 +95,20 @@ places saved before this list existed have free-text categories. run `recategori
 
 if your sheet has the older `Saves` tab, paste the new `Code.gs`, pick `migrateSaves` in the function dropdown and click Run once. rows move to the new tabs and the old tab is kept as `Saves (old)`. then deploy a new version (Deploy → Manage deployments → edit → Version: New version) so the web app uses the new code.
 
-## importing your old TikTok favorites
+## importing what you've already saved
 
-request your data in TikTok (Settings → Account → Download your data, format **JSON**), unzip it, then:
+bring in your past TikTok favorites and Instagram saved posts. ask each app for your data in **JSON** format:
+
+- **tiktok**: Settings and privacy → Account → Download your data → JSON. you get `user_data_tiktok.json`.
+- **instagram**: Accounts Center → Your information and permissions → Download your information → Some of your information → **Saved** only → Download to device, Format **JSON**, Date range **All time**. unzip it; that's the folder you pass.
+
+then:
 
 ```sh
-node scripts/import-tiktok.mjs user_data_tiktok.json --url https://YOUR-APP.vercel.app --since 2025-01-01
+node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https://YOUR-APP.vercel.app --since 2025-01-01
 ```
 
-it sends your Favorites newest first, one at a time, waiting for each save to finish, and each row keeps the date you favorited it. it stops at the first error that isn't about a single video (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private videos are just skipped. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.tiktok-import.json`). the SECRET is read from `.env.local`. at about half a cent to a cent per TikTok, around 500 fit in Apify's free $5 a month; for more, spread runs across months.
+it sends everything newest first, one at a time, waiting for each save to finish, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. `--dry-run` lists them without sending, `--limit 50` stops early, and running it again skips anything already done (progress is in `.import-progress.json`). the SECRET is read from `.env.local`. at about half a cent to a cent per TikTok and a third of a cent per Instagram post, around 500 TikToks or 1,500 posts fit in Apify's free $5 a month; for more, spread runs across months.
 
 ## how it works
 

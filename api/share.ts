@@ -31,7 +31,7 @@ export function GET(): Response {
   return json({ ok: true, service: 'reel-saver' });
 }
 
-/** POST { url, secret, saved_at?, wait? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
+/** POST { url, secret, saved_at?, wait?, note? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
 export async function POST(request: Request): Promise<Response> {
   try {
     return await handle(request);
@@ -85,7 +85,9 @@ async function handle(request: Request): Promise<Response> {
     return json({ ok: true, message: `Stub row written for ${url}` });
   }
 
-  const work = runPipeline(env, { url, platform, savedAt, lists });
+  // Imports can pass a short note for the notes column (e.g. "IG collection: Food").
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 200) : '';
+  const work = runPipeline(env, { url, platform, savedAt, lists, ...(note ? { note } : {}) });
   // Imports ask to wait for the real outcome, so they can stop on errors.
   if (body.wait === true || body.wait === 'true') return json(await work);
 
