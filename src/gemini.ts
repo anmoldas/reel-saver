@@ -1,5 +1,5 @@
-import { DEFAULT_PLACE_TYPES, OTHER, OTHER_PLACE, type Lists } from './topics.js';
-import type { Env, ItemType, ParsedItem, ParseResult, Post } from './types.js';
+import { DEFAULT_PLACE_TYPES, MENTION_KINDS, OTHER, OTHER_PLACE, type Lists } from './topics.js';
+import type { Env, ItemType, Mention, ParsedItem, ParseResult, Post } from './types.js';
 
 const BASE = 'https://generativelanguage.googleapis.com';
 
@@ -46,7 +46,20 @@ export function responseSchema({ topics, placeTypes }: Lists) {
                 topic: { type: 'STRING', enum: topics },
                 suggested_topic: STR,
                 takeaways: STR_LIST,
-                mentioned: STR_LIST,
+                mentioned: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      name: STR,
+                      kind: { type: 'STRING', enum: MENTION_KINDS },
+                      brand: STR,
+                      why: STR,
+                      price: STR,
+                    },
+                    required: ['name', 'kind', 'brand', 'why', 'price'],
+                  },
+                },
               },
               required: ['topic', 'suggested_topic', 'takeaways', 'mentioned'],
             },
@@ -75,7 +88,12 @@ Classify what the post is worth saving for:
   - "topic": one of ${topics.map((t) => `"${t}"`).join(', ')}. Travel advice without specific named spots is "Travel tips".
   - "suggested_topic": only when the topic is "${OTHER}", a short name for the topic it would need (e.g. "Fitness"); otherwise empty.
   - "takeaways": the 3 to 5 most useful points the post actually makes, each a short standalone sentence.
-  - "mentioned": specific tools, apps, products, brands, stores, books or people named in the post.
+  - "mentioned": every specific product, app, tool, brand, store, book, show, course or person the post names or recommends. For each:
+    - "name": what it is called, as specifically as the post says it (e.g. "Tea Tree & Rosemary Shampoo", "CapCut").
+    - "kind": one of ${MENTION_KINDS.map((k) => `"${k}"`).join(', ')}.
+    - "brand": the brand or maker when it is not already part of the name; otherwise empty.
+    - "why": one short line on why the post recommends it.
+    - "price": only if the post states a price; otherwise empty.
 
 Rules:
 - A post can mention several places. Return one item per place. A list of tips is one idea, not one item per tip.
@@ -167,6 +185,17 @@ function pick(value: unknown, options: string[], fallback: string): string {
   return options.find((o) => o.toLowerCase() === v) ?? fallback;
 }
 
+function mentions(v: unknown): Mention[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((m: any): Mention[] => {
+    // Older or looser output may give plain names.
+    if (typeof m === 'string') return m.trim() ? [{ name: m.trim(), kind: 'product', brand: '', why: '', price: '' }] : [];
+    const name = s(m?.name);
+    if (!name) return [];
+    return [{ name, kind: pick(m?.kind, MENTION_KINDS, 'product'), brand: s(m?.brand), why: s(m?.why), price: s(m?.price) }];
+  });
+}
+
 export function normalizeParse(
   raw: any,
   { topics, placeTypes }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE] },
@@ -207,7 +236,7 @@ export function normalizeParse(
         topic,
         suggested_topic: topic === OTHER ? s(r.suggested_topic) || invented : '',
         takeaways: list(r.takeaways),
-        mentioned: list(r.mentioned),
+        mentioned: mentions(r.mentioned),
       };
     }
     if (!item.title) item.title = item.place?.name ?? '';

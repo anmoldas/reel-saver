@@ -1,4 +1,4 @@
-import type { ParsedItem, PlaceMatch, Post, Row } from './types.js';
+import type { Mention, ParsedItem, PlaceMatch, Post, Row } from './types.js';
 import { mapsUrl } from './places.js';
 
 // Each row's `type` picks its tab in the sheet: place → Places, recipe → Recipes,
@@ -56,9 +56,40 @@ export function itemRow(base: Base, item: ParsedItem, match: PlaceMatch | null =
     row.topic = d.topic;
     row.suggested_topic = d.suggested_topic;
     row.takeaways = bullets(d.takeaways);
-    row.mentioned = d.mentioned.join(', ');
+    row.mentioned = d.mentioned.map((m) => m.name).join(', ');
   }
   return row;
+}
+
+const SHOPPABLE = new Set(['product', 'brand']);
+
+/** A search link to find the thing: Google Shopping for products, a web search for the rest. */
+export function shopLink(m: Mention): string {
+  const name = m.brand && !m.name.toLowerCase().includes(m.brand.toLowerCase()) ? `${m.brand} ${m.name}` : m.name;
+  if (SHOPPABLE.has(m.kind)) return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(name)}`;
+  const hint = m.kind === 'app/tool' ? 'app' : m.kind === 'show/movie' ? '' : m.kind;
+  return `https://www.google.com/search?q=${encodeURIComponent([name, hint].filter(Boolean).join(' '))}`;
+}
+
+/** One Mentions-tab row per thing an idea names. */
+export function mentionRows(base: Base, item: ParsedItem): Row[] {
+  if (!item.idea) return [];
+  const topic = item.idea.topic;
+  return item.idea.mentioned.map((m) => ({
+    type: 'mention',
+    saved_at: base.savedAt,
+    status: 'want',
+    name: m.name,
+    kind: m.kind,
+    brand: m.brand,
+    why: m.why,
+    price: m.price,
+    topic,
+    shop_link: shopLink(m),
+    from: item.title,
+    creator: base.post?.creator ? `@${base.post.creator}` : '',
+    source_url: base.sourceUrl,
+  }));
 }
 
 export function failedRow(base: Base, error: string): Row {

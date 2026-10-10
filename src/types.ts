@@ -44,7 +44,16 @@ export interface ParsedItem {
   confidence: number;
   recipe: { ingredients: string[]; steps: string[]; servings: string; time: string } | null;
   place: { name: string; city: string; country: string; category: string; specialty: string; what_to_order: string } | null;
-  idea: { topic: string; suggested_topic: string; takeaways: string[]; mentioned: string[] } | null;
+  idea: { topic: string; suggested_topic: string; takeaways: string[]; mentioned: Mention[] } | null;
+}
+
+/** A product, app, brand, store, book, etc. named in a post. Each becomes a row in the Mentions tab. */
+export interface Mention {
+  name: string;
+  kind: string;
+  brand: string;
+  why: string;
+  price: string;
 }
 
 export interface ParseResult {

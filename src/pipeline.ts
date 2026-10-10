@@ -2,7 +2,7 @@ import { getItems, normalizeItem, startRun, waitForRun } from './apify.js';
 import { errorMessage } from './errors.js';
 import { deleteVideo, needsVideo, parseCaption, parseVideo, uploadVideo } from './gemini.js';
 import { findPlace } from './places.js';
-import { failedRow, itemRow, summarize } from './rows.js';
+import { failedRow, itemRow, mentionRows, summarize } from './rows.js';
 import { writeRows } from './sheet.js';
 import type { Env, ParseResult, PipelineParams, PipelineResult, PlaceMatch, Post } from './types.js';
 
@@ -95,7 +95,8 @@ async function runSteps(
   // 4. Store
   if (state.abandoned) return { ok: false, message: 'abandoned' };
   const base = { savedAt, sourceUrl: url, post };
-  const written = await writeRows(env, url, result.items.map((item, i) => itemRow(base, item, matches[i])));
+  const rows = result.items.flatMap((item, i) => [itemRow(base, item, matches[i]), ...mentionRows(base, item)]);
+  const written = await writeRows(env, url, rows);
   if (written.duplicate) return { ok: true, message: 'Already saved' };
 
   const message = summarize(result.items);

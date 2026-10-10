@@ -84,11 +84,22 @@ one tab per kind of save. columns are matched by name, so you can reorder them o
 | **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, specialty, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, creator, source_url, thumbnail_url, notes` |
 | **Recipes** | anything you'd cook | `saved_at, done, title, summary, time, servings, ingredients, steps, creator, source_url, thumbnail_url, notes` |
 | **Ideas** | everything else: tips, advice, how-tos, products, outfits, tools | `saved_at, done, topic, title, summary, takeaways, mentioned, suggested_topic, creator, source_url, thumbnail_url, notes` |
+| **Mentions** | one row per product, app, brand, store, book, show, course or person an idea names | `saved_at, status, name, kind, brand, why, price, topic, times_mentioned, shop_link, from, creator, source_url, notes` |
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
 - place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it names.
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
+
+### mentions
+
+every thing an idea names gets its own row in **Mentions**: a shopping and to-try list across all your saves.
+
+- `kind` is one of product, app/tool, brand, store, book, show/movie, course, person. `why` is one line on why it was recommended; `price` is filled only when the video says one.
+- `shop_link` is a Google Shopping search for products and brands, and a web search for everything else.
+- `status` is a dropdown (want, bought, tried, skip); `notes` is yours.
+- `times_mentioned` counts how many rows name the same thing, so something three creators recommend stands out.
+- ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once from the editor to turn those into rows (kind, brand, why and price stay empty for them).
 
 ### topics
 
