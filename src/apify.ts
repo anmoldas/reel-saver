@@ -17,7 +17,8 @@ export function actorInput(platform: Platform, url: string): Record<string, unkn
     resultsPerPage: 1,
     // TikTok's own video links need cookies; a copy in Apify storage does not.
     shouldDownloadVideos: true,
-    shouldDownloadCovers: true,
+    // TikTok's cover link is public, so the Apps Script can copy it to Drive; an Apify copy would need the token.
+    shouldDownloadCovers: false,
     shouldDownloadSubtitles: false,
     shouldDownloadSlideshowImages: false,
   };
@@ -87,6 +88,6 @@ export function normalizeItem(platform: Platform, items: any[]): Post {
     caption: first(item.text, item.desc),
     creator: first(item.authorMeta?.name, item.authorMeta?.nickName, item.author?.uniqueId),
     videoUrl: first(item.mediaUrls?.[0], item.videoMeta?.downloadAddr, item.videoUrl),
-    thumbnailUrl: first(item.videoMeta?.coverUrl, item.covers?.[0], item.videoMeta?.originalCoverUrl, item.coverUrl),
+    thumbnailUrl: first(item.videoMeta?.originalCoverUrl, item.videoMeta?.coverUrl, item.covers?.[0], item.coverUrl),
   };
 }

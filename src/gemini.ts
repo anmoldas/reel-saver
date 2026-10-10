@@ -143,7 +143,8 @@ export function needsVideo(result: ParseResult, threshold: number): string | nul
       return 'recipe is missing ingredients or steps';
     }
     if (item.type === 'place' && (!item.place?.name || !item.place?.city)) return 'place is missing a name or city';
-    if (item.type === 'idea' && !item.idea?.takeaways.length) return 'idea has no takeaways';
+    // Tips and advice live in what is said, not the caption, so ideas always get the video.
+    if (item.type === 'idea') return 'ideas always use the video';
   }
   return null;
 }
