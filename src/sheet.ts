@@ -1,6 +1,13 @@
+import { errorMessage, withRetry } from './errors.js';
 import type { Env, Row } from './types.js';
 
-async function call(env: Env, payload: Record<string, unknown>): Promise<any> {
+// Apps Script now and then answers with an error page instead of JSON; a retry usually works.
+// Writes are safe to repeat: the script skips a save that is already in the sheet.
+function call(env: Env, payload: Record<string, unknown>): Promise<any> {
+  return withRetry(() => callOnce(env, payload), (err) => /^Sheet endpoint returned non-JSON \((404|429|5\d\d)\)/.test(errorMessage(err)));
+}
+
+async function callOnce(env: Env, payload: Record<string, unknown>): Promise<any> {
   // Apps Script answers POSTs with a redirect to the result; fetch follows it.
   const res = await fetch(env.SHEET_URL, {
     method: 'POST',

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEnv } from '../src/env.js';
+import { retryDelaysMs } from '../src/errors.js';
 import { runPipeline } from '../src/pipeline.js';
 import { lists } from '../src/topics.js';
 
@@ -48,6 +49,7 @@ function fakeServices(opts: { caption: string; captionParse: unknown; videoParse
   return { sheetWrites, calls, geminiBodies, geminiCalls: () => geminiCalls };
 }
 
+retryDelaysMs.splice(0, retryDelaysMs.length, 0, 0);
 afterEach(() => vi.unstubAllGlobals());
 
 describe('runPipeline', () => {
@@ -171,6 +173,53 @@ describe('runPipeline', () => {
     });
     await runPipeline(env, { ...params, note: 'IG collection: Food' });
     expect(svc.sheetWrites[0].rows[0]).toMatchObject({ title: 'Veracruz', notes: 'IG collection: Food' });
+  });
+
+  it('tries Gemini again when it is briefly overloaded', async () => {
+    const svc = fakeServices({
+      caption: 'Best tacos: Veracruz in Austin',
+      captionParse: { needs_video: false, items: [{ type: 'place', title: 'Veracruz', summary: 'tacos', confidence: 0.9, place: { name: 'Veracruz', city: 'Austin', category: 'restaurant', what_to_order: '' } }] },
+    });
+    const real = globalThis.fetch;
+    let busy = 1;
+    vi.stubGlobal('fetch', async (u: string, i?: RequestInit) => {
+      if (String(u).includes(':generateContent') && busy-- > 0) return new Response('{"error":{"code":503}}', { status: 503 });
+      return real(u, i);
+    });
+    const result = await runPipeline(env, params);
+    expect(result.message).toBe('Saved place: Veracruz');
+    expect(svc.sheetWrites[0].rows[0].title).toBe('Veracruz');
+  });
+
+  it('gives up on Gemini after the retries', async () => {
+    fakeServices({ caption: 'x', captionParse: {} });
+    const real = globalThis.fetch;
+    let tries = 0;
+    vi.stubGlobal('fetch', async (u: string, i?: RequestInit) => {
+      if (String(u).includes(':generateContent')) {
+        tries++;
+        return new Response('{"error":{"code":503}}', { status: 503 });
+      }
+      return real(u, i);
+    });
+    const result = await runPipeline(env, params);
+    expect(result.message).toMatch(/^Couldn't save: Gemini 503/);
+    expect(tries).toBe(3);
+  });
+
+  it('does not retry a Gemini error that will not pass', async () => {
+    fakeServices({ caption: 'x', captionParse: {} });
+    const real = globalThis.fetch;
+    let tries = 0;
+    vi.stubGlobal('fetch', async (u: string, i?: RequestInit) => {
+      if (String(u).includes(':generateContent')) {
+        tries++;
+        return new Response('{"error":{"code":400}}', { status: 400 });
+      }
+      return real(u, i);
+    });
+    await runPipeline(env, params);
+    expect(tries).toBe(1);
   });
 
   it('writes a failed row for a private post', async () => {

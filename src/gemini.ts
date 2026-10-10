@@ -1,4 +1,5 @@
 import { DEFAULT_PLACE_TYPES, MENTION_KINDS, OTHER, OTHER_PLACE, type Lists } from './topics.js';
+import { errorMessage, withRetry } from './errors.js';
 import type { Env, ItemType, Mention, ParsedItem, ParseResult, Post } from './types.js';
 
 const BASE = 'https://generativelanguage.googleapis.com';
@@ -116,7 +117,14 @@ function generateUrl(model: string): string {
   return `${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 }
 
-async function generate(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
+// Overloaded (503), rate limited (429) or a server error: worth another try.
+const TEMPORARY_GEMINI = /^Gemini (429|500|502|503|504)\b/;
+
+function generate(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
+  return withRetry(() => generateOnce(env, lists, parts), (err) => TEMPORARY_GEMINI.test(errorMessage(err)));
+}
+
+async function generateOnce(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
   const res = await fetch(generateUrl(env.GEMINI_MODEL), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
