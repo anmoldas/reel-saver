@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeItem } from '../src/apify.js';
 import { PermanentError } from '../src/errors.js';
 import { needsVideo, normalizeParse } from '../src/gemini.js';
-import { countryFromAddress, itemRow, summarize } from '../src/rows.js';
+import { countryFromAddress, itemRow, mentionRows, shopLink, summarize } from '../src/rows.js';
 import { DEFAULT_PLACE_TYPES, DEFAULT_TOPICS, lists, placeTypeList, topicList } from '../src/topics.js';
 
 describe('normalizeItem', () => {
@@ -146,5 +146,66 @@ describe('rows', () => {
     }).items;
     expect(summarize(items.slice(0, 1))).toBe('Saved place: A');
     expect(summarize(items)).toBe('Saved 4 places: A, B, C, +1 more');
+  });
+});
+
+describe('mentions', () => {
+  const base = { savedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://u', post: { caption: '', creator: 'egg', videoUrl: '', thumbnailUrl: 't' } };
+  const parsed = normalizeParse(
+    {
+      items: [
+        {
+          type: 'idea',
+          title: 'Inexpensive Hair Products',
+          confidence: 1,
+          idea: {
+            topic: 'beauty',
+            takeaways: ['x'],
+            mentioned: [
+              { name: 'Tea Tree & Rosemary Shampoo', kind: 'Product', brand: 'Renpure', why: 'helps an itchy scalp', price: '$8' },
+              { name: 'CapCut', kind: 'app/tool', brand: '', why: '', price: '' },
+              { name: 'Mystery', kind: 'gadget' },
+              { name: '', kind: 'product' },
+            ],
+          },
+        },
+      ],
+    },
+    lists(['Beauty']),
+  );
+  const [item] = parsed.items;
+
+  it('keeps structured mentions, normalizes kind, and drops nameless ones', () => {
+    expect(item.idea?.mentioned.map((m) => [m.name, m.kind])).toEqual([
+      ['Tea Tree & Rosemary Shampoo', 'product'],
+      ['CapCut', 'app/tool'],
+      ['Mystery', 'product'],
+    ]);
+    expect(itemRow(base, item).mentioned).toBe('Tea Tree & Rosemary Shampoo, CapCut, Mystery');
+  });
+
+  it('writes one Mentions row per mention with a search link and the save it came from', () => {
+    const rows = mentionRows(base, item);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      type: 'mention', status: 'want', name: 'Tea Tree & Rosemary Shampoo', kind: 'product', brand: 'Renpure',
+      why: 'helps an itchy scalp', price: '$8', topic: 'Beauty', from: 'Inexpensive Hair Products', creator: '@egg', source_url: 'https://u',
+      shop_link: 'https://www.google.com/search?tbm=shop&q=Renpure%20Tea%20Tree%20%26%20Rosemary%20Shampoo',
+    });
+  });
+
+  it('uses Google Shopping for products and a web search for everything else', () => {
+    expect(shopLink({ name: 'CapCut', kind: 'app/tool', brand: '', why: '', price: '' })).toBe('https://www.google.com/search?q=CapCut%20app');
+    expect(shopLink({ name: 'Atomic Habits', kind: 'book', brand: '', why: '', price: '' })).toBe(
+      'https://www.google.com/search?q=Atomic%20Habits%20book',
+    );
+    expect(shopLink({ name: 'Renpure Shampoo', kind: 'product', brand: 'Renpure', why: '', price: '' })).toBe(
+      'https://www.google.com/search?tbm=shop&q=Renpure%20Shampoo',
+    );
+  });
+
+  it('has no mentions for places and recipes', () => {
+    const [place] = normalizeParse({ items: [{ type: 'place', title: 'A', place: { name: 'A' } }] }).items;
+    expect(mentionRows(base, place)).toEqual([]);
   });
 });

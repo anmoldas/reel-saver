@@ -108,7 +108,7 @@ describe('video download', () => {
     const svc = fakeServices({
       caption: '',
       // No caption means the first (and only) Gemini call is the video one.
-      captionParse: { needs_video: false, items: [{ type: 'idea', title: 'Thing', summary: '', confidence: 0.9, idea: { topic: 'Other', takeaways: ['y'] } }] },
+      captionParse: { needs_video: false, items: [{ type: 'idea', title: 'Thing', summary: '', confidence: 0.9, idea: { topic: 'Other', takeaways: ['y'], mentioned: [{ name: 'CapCut', kind: 'app/tool' }] } }] },
       apifyItem: { text: '', authorMeta: { name: 'a' }, mediaUrls: ['https://api.apify.com/v2/key-value-stores/s/records/v'] },
     });
     const inner = globalThis.fetch;
@@ -123,5 +123,10 @@ describe('video download', () => {
     expect(seen.auth).toBe('Bearer a');
     expect(result.message).toBe('Saved idea: Thing');
     expect(svc.geminiCalls()).toBe(1); // no caption, so straight to the video
+    // The idea and its mention go to the sheet in one write.
+    expect(svc.sheetWrites.at(-1).rows.map((r: any) => [r.type, r.title ?? r.name])).toEqual([
+      ['idea', 'Thing'],
+      ['mention', 'CapCut'],
+    ]);
   });
 });

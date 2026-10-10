@@ -25,12 +25,18 @@ const TABS = {
     columns: ['saved_at', 'done', 'topic', 'title', 'summary', 'takeaways', 'mentioned', 'suggested_topic',
       'creator', 'source_url', 'thumbnail_url', 'notes'],
   },
+  mention: {
+    name: 'Mentions',
+    columns: ['saved_at', 'status', 'name', 'kind', 'brand', 'why', 'price', 'topic', 'times_mentioned', 'shop_link',
+      'from', 'creator', 'source_url', 'notes'],
+  },
   failed: {
     name: 'Failed',
     columns: ['saved_at', 'source_url', 'error', 'creator'],
   },
 };
 const CONTENT_TYPES = ['place', 'recipe', 'idea'];
+const MENTION_STATUSES = ['want', 'bought', 'tried', 'skip'];
 
 const TOPICS_TAB = 'Topics';
 const DEFAULT_TOPICS = ['Travel tips', 'Clothing', 'Career', 'AI', 'Video editing', 'Journaling', 'Organization'];
@@ -85,16 +91,16 @@ function check_(sourceUrl) {
 function write_(sourceUrl, rows) {
   if (savedRows_(sourceUrl).length) return { ok: true, written: 0, duplicate: true };
 
-  const failedSheet = sheetFor_('failed');
-  rowsIn_(failedSheet, sourceUrl).map(function (r) { return r.rowNumber; })
-    .sort(function (a, b) { return b - a; })
-    .forEach(function (n) { failedSheet.deleteRow(n); });
+  // Earlier failed rows, and mentions left over from a save that was deleted, are replaced.
+  deleteRowsFor_(sheetFor_('failed'), sourceUrl);
+  const mentions = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.mention.name);
+  if (mentions) deleteRowsFor_(mentions, sourceUrl);
 
   const thumbCache = {};
   const byType = {};
   rows.forEach(function (row) {
     const type = TABS[row.type] ? row.type : 'idea';
-    if (row.thumbnail_url && type !== 'failed') {
+    if (row.thumbnail_url && CONTENT_TYPES.indexOf(type) !== -1) {
       thumbCache[row.thumbnail_url] = thumbCache[row.thumbnail_url] || saveThumbnail_(row.thumbnail_url);
       row.thumbnail_url = thumbCache[row.thumbnail_url];
     }
@@ -116,7 +122,25 @@ function append_(type, rows) {
   sheet.getRange(start, 1, values.length, header.length).setValues(values);
   const doneCol = header.indexOf('done');
   if (doneCol !== -1) sheet.getRange(start, doneCol + 1, values.length, 1).insertCheckboxes();
+  const statusCol = header.indexOf('status');
+  if (statusCol !== -1) {
+    const rule = SpreadsheetApp.newDataValidation().requireValueInList(MENTION_STATUSES, true).build();
+    sheet.getRange(start, statusCol + 1, values.length, 1).setDataValidation(rule);
+  }
+  // How many saves in this tab name the same thing: a strong "everyone recommends it" signal.
+  const timesCol = header.indexOf('times_mentioned');
+  const nameCol = header.indexOf('name');
+  if (timesCol !== -1 && nameCol !== -1) {
+    const c = nameCol + 1;
+    sheet.getRange(start, timesCol + 1, values.length, 1).setFormulaR1C1('=COUNTIF(C' + c + ':C' + c + ',RC' + c + ')');
+  }
   return values.length;
+}
+
+function deleteRowsFor_(sheet, sourceUrl) {
+  rowsIn_(sheet, sourceUrl).map(function (r) { return r.rowNumber; })
+    .sort(function (a, b) { return b - a; })
+    .forEach(function (n) { sheet.deleteRow(n); });
 }
 
 function cell_(col, value) {
@@ -321,6 +345,39 @@ function recategorizePlaces() {
   });
   range.setValues(values);
   Logger.log('Updated ' + changed + ' places. Set to "other", check by hand: ' + (unmatched.join(', ') || 'none'));
+}
+
+/**
+ * One-time: turns the "mentioned" lists on existing Ideas rows into Mentions rows.
+ * Kind, brand, why and price stay empty for these; new saves fill them in. Safe to re-run:
+ * ideas that already have Mentions rows are skipped.
+ */
+function backfillMentions() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ideas = ss.getSheetByName(TABS.idea.name);
+  if (!ideas || ideas.getLastRow() < 2) {
+    Logger.log('No Ideas rows.');
+    return;
+  }
+  const mentionsSheet = sheetFor_('mention');
+  const values = ideas.getDataRange().getValues();
+  const header = values[0].map(String);
+  const col = function (name) { return header.indexOf(name); };
+  const rows = [];
+  values.slice(1).forEach(function (r) {
+    const url = r[col('source_url')];
+    const names = String(r[col('mentioned')] || '').split(',').map(function (n) { return n.trim(); }).filter(String);
+    if (!url || !names.length || rowsIn_(mentionsSheet, url).length) return;
+    names.forEach(function (name) {
+      rows.push({
+        saved_at: r[col('saved_at')], status: 'want', name: name, topic: r[col('topic')],
+        shop_link: 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(name),
+        from: r[col('title')], creator: r[col('creator')], source_url: url,
+      });
+    });
+  });
+  append_('mention', rows);
+  Logger.log('Added ' + rows.length + ' mentions.');
 }
 
 /** Build step 1: run this from the editor to check the sheet with a hand-written row. */

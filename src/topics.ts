@@ -25,6 +25,8 @@ export const DEFAULT_PLACE_TYPES = [
   'stay',
 ];
 
+export const MENTION_KINDS = ['product', 'app/tool', 'brand', 'store', 'book', 'show/movie', 'course', 'person'];
+
 export const OTHER = 'Other';
 export const OTHER_PLACE = 'other';
 
