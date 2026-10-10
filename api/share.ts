@@ -32,6 +32,15 @@ export function GET(): Response {
 
 /** POST { url, secret } from the iOS Shortcut. Always answers with { ok, message }. */
 export async function POST(request: Request): Promise<Response> {
+  try {
+    return await handle(request);
+  } catch (err) {
+    console.log(`[reel-saver] request failed: ${errorMessage(err)}`);
+    return json({ ok: false, message: `Error: ${errorMessage(err)}` }, 500);
+  }
+}
+
+async function handle(request: Request): Promise<Response> {
   let env;
   try {
     env = getEnv();

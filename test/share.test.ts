@@ -39,3 +39,12 @@ describe('POST /api/share', () => {
     expect(sheet[0].rows[0]).toMatchObject({ type: 'failed', source_url: 'https://youtube.com/shorts/x' });
   });
 });
+
+describe('POST /api/share errors', () => {
+  it('returns a readable message when the sheet is unreachable', async () => {
+    vi.stubGlobal('fetch', async () => new Response('<html>Sign in</html>', { status: 200 }));
+    const res = await post({ url: 'https://www.instagram.com/reel/NEW/', secret: 'sek', stub: true });
+    expect(res.status).toBe(500);
+    expect((await res.json()).message).toMatch(/Sheet endpoint returned non-JSON/);
+  });
+});
