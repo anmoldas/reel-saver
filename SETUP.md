@@ -154,6 +154,7 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 | `Sheet: Wrong secret` | Script property `SECRET` doesn't match the settings file | `node scripts/setup.mjs copy SECRET`, then re-paste it in Project Settings → Script properties. |
 | `Wrong secret` (from the app itself) | The Shortcut's secret field doesn't match | Re-copy the secret into the Shortcut's `secret` field. |
 | `Missing environment variables: …` | Keys not sent to Vercel, or not redeployed after sending | `node scripts/setup.mjs push`, then `npx vercel deploy --prod --yes`. Vercel only picks up key changes on a new deploy. |
+| Every save fails with `non-JSON (404)` right after updating the script | A **New deployment** was made (or the old one archived), which gives the web app a new address | Keep using **Manage deployments → pencil → New version** on the original deployment. If the old one is already archived, put the new `/exec` address in `SHEET_URL` (settings file, then `node scripts/setup.mjs push`) and redeploy with `npx vercel deploy --prod --yes`. |
 | Changes to the settings file have no effect | Same as above | Push and redeploy. |
 | A row in **Failed**: `Post not found` / `Post unavailable` | Private or deleted post | Nothing to fix; it can't be read. |
 | Failed: `Could not download the video (403)` | Very rare; the video link expired | Share it again. |
@@ -168,4 +169,4 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 
 ## Updating later
 
-To get a newer version: download the code again (Step 1) into a fresh folder, copy their `.env.local` across, then run `npx vercel link --yes --project <their project>` and `npx vercel deploy --prod --yes`. If `apps-script/Code.gs` changed, paste it into Apps Script again and do **Deploy → Manage deployments → pencil → New version → Deploy**.
+To get a newer version: download the code again (Step 1) into a fresh folder, copy their `.env.local` across, then run `npx vercel link --yes --project <their project>` and `npx vercel deploy --prod --yes`. If `apps-script/Code.gs` changed, paste it into Apps Script again and do **Deploy → Manage deployments → pencil → New version → Deploy**. Don't use **New deployment** or archive the old one: that changes the web app's address and saves stop until `SHEET_URL` is updated.

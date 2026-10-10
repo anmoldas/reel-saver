@@ -146,7 +146,7 @@ the same steps Claude Code follows. you'll also need to make up one long random 
 4. back in the editor, pick `testWrite` from the function dropdown and click Run. approve the permissions (Sheets, Drive for thumbnails, external requests). a `Places` tab appears with one test row, plus `Topics` and `Place types` tabs. delete the test row.
 5. Deploy → New deployment → type **Web app**. Execute as **Me**, Who has access **Anyone**. copy the URL ending in `/exec`. that's your `SHEET_URL`.
 
-> if you edit `Code.gs` later, use Deploy → Manage deployments → edit → Version: New version, so the URL stays the same.
+> if you edit `Code.gs` later, use Deploy → Manage deployments → edit → Version: New version, so the URL stays the same. don't make a new deployment or archive the old one: the address changes and every save fails until `SHEET_URL` is updated.
 
 ### 3. deploy to vercel
 
