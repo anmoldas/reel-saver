@@ -14,16 +14,24 @@ the shortcut waits up to 20 seconds. if the save finishes in that time you get "
 
 ## setup (about 30 minutes, once)
 
+**easiest:** open [Claude Code](https://claude.com/claude-code) in an empty folder and say:
+
+> Set up Reel Saver for me by following https://raw.githubusercontent.com/anmoldas/reel-saver/main/SETUP.md
+
+it walks you through the accounts one at a time, keeps your keys in a local file instead of the chat, deploys to Vercel, and tests everything. [SETUP.md](SETUP.md) is that guide.
+
+the manual steps below do the same thing by hand.
+
 ### 1. accounts and keys
 
 | what | where | notes |
 |---|---|---|
 | Apify token | apify.com → Settings → API & Integrations | free plan includes $5/month of credit |
 | Gemini key | aistudio.google.com → Get API key | free tier, no card needed |
-| Places key | console.cloud.google.com → new project → enable **Places API (New)** → Credentials → Create API key | under "API restrictions" pick Places API (New) only. needs a billing account, but 5,000 lookups a month are free |
+| Places key (optional) | console.cloud.google.com → new project → enable **Places API (New)** → Credentials → Create API key | adds address, coordinates and an exact Maps pin. under "API restrictions" pick Places API (New) only. needs a billing account, but 5,000 lookups a month are free. without it, places save with a Maps search link |
 | Vercel | vercel.com | free Hobby plan |
 
-also make up one long random string to use as your `SECRET` (for example run `openssl rand -hex 24`, or mash the keyboard).
+also make up one long random string to use as your `SECRET` (`node scripts/setup.mjs init` makes one for you in `.env.local`).
 
 ### 2. sheet + apps script (build step 1)
 
@@ -37,9 +45,9 @@ also make up one long random string to use as your `SECRET` (for example run `op
 
 ### 3. deploy to vercel
 
-1. vercel.com → Add New → Project → import `anmoldas/reel-saver`.
+1. vercel.com → Add New → Project → import your copy of this repo (or deploy from the folder with `npx vercel deploy --prod`).
 2. framework preset: Other. leave the build settings empty.
-3. Environment Variables: add `SECRET`, `APIFY_TOKEN`, `GEMINI_API_KEY`, `PLACES_API_KEY`, `SHEET_URL`. the rest of `.env.example` is optional.
+3. Environment Variables: add `SECRET`, `APIFY_TOKEN`, `GEMINI_API_KEY`, `SHEET_URL`, and `PLACES_API_KEY` if you have one. the rest of `.env.example` is optional.
 4. Deploy. your endpoint is `https://<project>.vercel.app/api/share`.
 
 test it with a stub row (build step 2, which skips Apify and Gemini):

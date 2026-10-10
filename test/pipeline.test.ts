@@ -130,3 +130,23 @@ describe('video download', () => {
     ]);
   });
 });
+
+describe('without a Places key', () => {
+  it('still saves places, with a Maps search link and no lookup', async () => {
+    const svc = fakeServices({
+      caption: 'Try Veracruz in Austin',
+      captionParse: {
+        needs_video: false,
+        items: [{ type: 'place', title: 'Veracruz', summary: '', confidence: 0.9, place: { name: 'Veracruz', city: 'Austin', category: 'restaurant' } }],
+      },
+    });
+    const noPlaces = getEnv({ SECRET: 's', APIFY_TOKEN: 'a', GEMINI_API_KEY: 'g', SHEET_URL: 'https://sheet.test/exec' });
+    const result = await runPipeline(noPlaces, params);
+    expect(result.message).toBe('Saved place: Veracruz');
+    expect(svc.calls.some((u) => u.includes('places.googleapis.com'))).toBe(false);
+    expect(svc.sheetWrites[0].rows[0]).toMatchObject({
+      maps_url: 'https://www.google.com/maps/search/?api=1&query=Veracruz%2C%20Austin',
+    });
+    expect(svc.sheetWrites[0].rows[0].place_id).toBeUndefined();
+  });
+});
