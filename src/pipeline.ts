@@ -52,7 +52,9 @@ async function runSteps(
   // 1. Fetch
   const { runId, datasetId } = await startRun(env, platform, url);
   await waitForRun(env, runId, 200);
-  const post = normalizeItem(platform, await getItems(env, datasetId));
+  const items = await getItems(env, datasetId);
+  const post = normalizeItem(platform, items);
+  if (!post.caption) log(url, `no caption; scraper fields: ${Object.keys(items[0] ?? {}).join(', ')}`);
   onPost(post);
   log(url, `fetched @${post.creator}, caption ${post.caption.length} chars, video ${post.videoUrl ? 'yes' : 'no'}`);
 

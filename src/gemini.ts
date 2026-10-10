@@ -164,8 +164,10 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 /** Downloads the video and uploads it to Gemini. Returns the file handle. */
 export async function uploadVideo(env: Env, videoUrl: string): Promise<{ name: string; uri: string; mimeType: string }> {
-  const dl = await fetch(videoUrl);
-  if (!dl.ok) throw new Error(`Could not download the video (${dl.status})`);
+  // Videos the scraper stored in Apify need the token: new Apify accounts keep storage private.
+  const fromApify = new URL(videoUrl).hostname === 'api.apify.com';
+  const dl = await fetch(videoUrl, fromApify ? { headers: { Authorization: `Bearer ${env.APIFY_TOKEN}` } } : undefined);
+  if (!dl.ok) throw new Error(`Could not download the video from ${new URL(videoUrl).hostname} (${dl.status})`);
   const bytes = await dl.arrayBuffer();
   if (bytes.byteLength > MAX_VIDEO_BYTES) throw new Error('Video is too large');
   const mimeType = (dl.headers.get('content-type') || '').startsWith('video/')

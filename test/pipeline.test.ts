@@ -100,3 +100,27 @@ describe('runPipeline', () => {
     expect(svc.sheetWrites.at(-1).rows[0].type).toBe('failed');
   });
 });
+
+describe('video download', () => {
+  it('sends the Apify token when the video is stored in Apify', async () => {
+    const seen: Record<string, string | null> = {};
+    const svc = fakeServices({
+      caption: '',
+      // No caption means the first (and only) Gemini call is the video one.
+      captionParse: { needs_video: false, items: [{ type: 'recommendation', title: 'Thing', summary: '', confidence: 0.9, recommendation: { category: 'x', details: 'y' } }] },
+      apifyItem: { text: '', authorMeta: { name: 'a' }, mediaUrls: ['https://api.apify.com/v2/key-value-stores/s/records/v'] },
+    });
+    const inner = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).startsWith('https://api.apify.com/v2/key-value-stores/')) {
+        seen.auth = new Headers(init?.headers).get('authorization');
+        return new Response(new Uint8Array([1]), { headers: { 'content-type': 'video/mp4' } });
+      }
+      return inner(u, init);
+    });
+    const result = await runPipeline(env, { ...params, platform: 'tiktok' });
+    expect(seen.auth).toBe('Bearer a');
+    expect(result.message).toBe('Saved recommendation: Thing');
+    expect(svc.geminiCalls()).toBe(1); // no caption, so straight to the video
+  });
+});
