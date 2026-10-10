@@ -33,6 +33,11 @@ describe('POST /api/share', () => {
     expect(sheet[1]).toMatchObject({ action: 'write', secret: 'sek', rows: [{ title: 'Stub row' }] });
   });
 
+  it('keeps the save date an import passes', async () => {
+    await post({ url: 'https://www.instagram.com/reel/NEW/', secret: 'sek', stub: true, saved_at: '2024-03-05T10:00:00Z' });
+    expect(sheet[1].rows[0].saved_at).toBe('2024-03-05T10:00:00.000Z');
+  });
+
   it('writes a failed row for unsupported links', async () => {
     const res = await (await post({ url: 'https://youtube.com/shorts/x', secret: 'sek' })).json();
     expect(res.ok).toBe(false);
