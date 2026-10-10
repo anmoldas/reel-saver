@@ -36,6 +36,18 @@ function makeSheet(name: string) {
           return this;
         },
         clearDataValidations() { return this; },
+        sort({ column, ascending }: { column: number; ascending: boolean }) {
+          const block = rows.slice(r - 1, r - 1 + nr);
+          const t = (x: unknown) => (x instanceof Date ? x.getTime() : x === '' ? null : new Date(String(x)).getTime());
+          block.sort((a, b) => {
+            const x = t(a[column - 1]);
+            const y = t(b[column - 1]);
+            if (x === null || y === null) return x === null ? (y === null ? 0 : 1) : -1; // blanks last
+            return ascending ? x - y : y - x;
+          });
+          rows.splice(r - 1, nr, ...block);
+          return this;
+        },
         setFontWeight() { return this; },
         setDataValidation() { return this; },
         insertCheckboxes() { return this; },
@@ -64,7 +76,7 @@ function load() {
     PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: {}, UrlFetchApp: {},
   };
   const src = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_ };`)(...Object.values(globals));
+  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_ };`)(...Object.values(globals));
 }
 
 let gs: {
@@ -72,6 +84,8 @@ let gs: {
   detachMentions_: (url: string) => void;
   readMentions_: () => { count: number; rows: { row: number; name: string }[] };
   cleanMentions_: (body: object) => any;
+  append_: (type: string, rows: object[]) => number;
+  applyNewTopics_: () => { ideas: number; mentions: number };
 };
 const mentions = () => sheets.Mentions.rows;
 const field = (r: Row, c: string) => r[(mentions()[0] as string[]).indexOf(c)];
@@ -176,5 +190,33 @@ describe('Mentions cleanup', () => {
     oldStyle();
     expect(gs.cleanMentions_({ count: 3, remove: [2] })).toMatchObject({ ok: false });
     expect(mentions()).toHaveLength(5);
+  });
+});
+
+describe('newest first', () => {
+  it('keeps a tab sorted by saved_at, newest at the top, whatever order rows arrive in', () => {
+    gs.append_('idea', [{ title: 'b', saved_at: '2024-05-01T00:00:00Z' }]);
+    gs.append_('idea', [{ title: 'c', saved_at: '2026-01-01T00:00:00Z' }, { title: 'a', saved_at: '2021-03-01T00:00:00Z' }]);
+    const ideas = sheets.Ideas.rows;
+    const title = (r: Row) => r[(ideas[0] as string[]).indexOf('title')];
+    expect(ideas.slice(1).map(title)).toEqual(['c', 'b', 'a']);
+  });
+});
+
+describe('applyNewTopics', () => {
+  it('moves Other ideas whose suggested topic is now listed, and their mentions', () => {
+    makeSheet('Topics').rows.push(['topic'], ['Career'], ['Fitness']);
+    gs.append_('idea', [
+      { title: 'Kettlebells', topic: 'Other', suggested_topic: 'fitness', source_url: 'u1', saved_at: '2026-01-02T00:00:00Z' },
+      { title: 'Gardening', topic: 'Other', suggested_topic: 'Gardening', source_url: 'u2', saved_at: '2026-01-01T00:00:00Z' },
+    ]);
+    gs.mergeMentions_([m('Kettlebell', '', 'u1', { topic: 'Other' }), m('Trowel', '', 'u2', { topic: 'Other' })]);
+    expect(gs.applyNewTopics_()).toEqual({ ideas: 1, mentions: 1 });
+    const ideas = sheets.Ideas.rows;
+    const col = (r: Row, c: string) => r[(ideas[0] as string[]).indexOf(c)];
+    expect(ideas.slice(1).map((r) => [col(r, 'title'), col(r, 'topic'), col(r, 'suggested_topic')]))
+      .toEqual([['Kettlebells', 'Fitness', ''], ['Gardening', 'Other', 'Gardening']]);
+    expect(field(byName('Kettlebell'), 'topic')).toBe('Fitness');
+    expect(field(byName('Trowel'), 'topic')).toBe('Other');
   });
 });
