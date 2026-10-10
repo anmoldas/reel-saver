@@ -65,7 +65,8 @@ async function tiktokUrlFromId(id: string, fetchImpl: typeof fetch): Promise<str
   );
   const data: any = res.ok ? await res.json().catch(() => null) : null;
   const user = typeof data?.author_unique_id === 'string' ? data.author_unique_id : '';
-  if (!user) throw new Error('Post not found. It may be private or deleted');
+  // TikTok usernames are letters, digits, "_" and "."; anything else is not trusted into the URL.
+  if (!/^[A-Za-z0-9._]{1,64}$/.test(user)) throw new Error('Post not found. It may be private or deleted');
   return `https://www.tiktok.com/@${user}/video/${id}`;
 }
 

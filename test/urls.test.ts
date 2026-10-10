@@ -55,6 +55,11 @@ describe('resolvePostUrl', () => {
     await expect(resolvePostUrl('https://www.tiktok.com/@/video/1', fetchMock)).rejects.toThrow(/private or deleted/);
   });
 
+  it('does not trust an odd username from TikTok', async () => {
+    const fetchMock = (async () => Response.json({ author_unique_id: 'x/../../evil?a=' })) as typeof fetch;
+    await expect(resolvePostUrl('https://www.tiktok.com/@/video/1', fetchMock)).rejects.toThrow(/private or deleted/);
+  });
+
   it('reads the real post out of an Instagram login redirect', async () => {
     const fetchMock = (async () =>
       redirect('https://www.instagram.com/accounts/login/?next=%2Freel%2FREAL1%2F%3Figsh%3Dx')) as typeof fetch;
