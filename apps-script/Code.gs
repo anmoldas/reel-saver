@@ -67,6 +67,8 @@ function doPost(e) {
   try {
     if (body.action === 'check') return json_(check_(body.source_url));
     if (body.action === 'write') return json_(write_(body.source_url, body.rows || []));
+    if (body.action === 'mentions') return json_(readMentions_());
+    if (body.action === 'cleanMentions') return json_(cleanMentions_(body));
     return json_({ ok: false, error: 'Unknown action: ' + body.action });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -230,6 +232,120 @@ function detachMentions_(sourceUrl) {
     row.times_mentioned = urls.length - 1;
     sheet.getRange(i + 2, 1, 1, header.length).setValues([header.map(function (c) { return cell_(c, row[c]); })]);
   }
+}
+
+// ---- One-time Mentions cleanup (scripts/clean-mentions.mjs drives it) ----
+
+const MENTIONS_BACKUP = 'Mentions (backup)';
+
+/** Every Mentions row with its row number, for review. */
+function readMentions_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.mention.name);
+  if (!sheet || sheet.getLastRow() < 2) return { ok: true, count: 0, rows: [] };
+  const header = header_(sheet, TABS.mention.columns);
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  return {
+    ok: true,
+    count: data.length,
+    rows: data.map(function (values, i) {
+      const r = rowObject_(header, values);
+      return { row: i + 2, name: r.name, kind: r.kind, brand: r.brand, why: r.why, topic: r.topic, from: r.from };
+    }),
+  };
+}
+
+/**
+ * Applies a reviewed plan: { count, remove: [row numbers], updates: [{ row, kind, shop_link }], dry_run }.
+ * Backs the tab up first, then drops and fixes rows and merges duplicates into one row each.
+ * Refuses if the tab has a different number of rows than when it was read.
+ */
+function cleanMentions_(body) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(TABS.mention.name);
+  if (!sheet || sheet.getLastRow() < 2) return { ok: true, before: 0, removed: 0, after: 0, merged: [] };
+  const header = header_(sheet, TABS.mention.columns);
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  if (Number(body.count) !== data.length) {
+    return { ok: false, error: 'The Mentions tab changed since it was reviewed (' + data.length + ' rows, expected ' + body.count + '). Run the preview again.' };
+  }
+  const remove = {};
+  (body.remove || []).forEach(function (n) { remove[Number(n)] = true; });
+  (body.updates || []).forEach(function (u) {
+    const i = Number(u.row) - 2;
+    if (!data[i]) return;
+    if (u.kind) data[i][header.indexOf('kind')] = u.kind;
+    if (u.shop_link) data[i][header.indexOf('shop_link')] = u.shop_link;
+  });
+  const kept = data.filter(function (_, i) { return !remove[i + 2]; }).map(function (v) { return rowObject_(header, v); });
+  const grouped = groupMentions_(kept);
+  const result = {
+    ok: true,
+    before: data.length,
+    removed: data.length - kept.length,
+    after: grouped.length,
+    merged: grouped.filter(function (r) { return r._merged > 1; }).map(function (r) { return r.name + ' (' + r._merged + ' rows)'; }),
+  };
+  if (body.dry_run) return result;
+
+  const old = ss.getSheetByName(MENTIONS_BACKUP);
+  if (old) ss.deleteSheet(old);
+  sheet.copyTo(ss).setName(MENTIONS_BACKUP);
+
+  sheet.getRange(2, 1, data.length, header.length).clearContent().clearDataValidations();
+  if (grouped.length) {
+    sheet.getRange(2, 1, grouped.length, header.length)
+      .setValues(grouped.map(function (r) { return header.map(function (c) { return cell_(c, r[c]); }); }));
+    const statusCol = header.indexOf('status');
+    if (statusCol !== -1) {
+      const rule = SpreadsheetApp.newDataValidation().requireValueInList(MENTION_STATUSES, true).build();
+      sheet.getRange(2, statusCol + 1, grouped.length, 1).setDataValidation(rule);
+    }
+  }
+  return result;
+}
+
+/**
+ * Folds rows that name the same thing into one: every save listed once, the earliest date, the first
+ * wording, a status you changed from "want" kept, and all your notes kept.
+ */
+function groupMentions_(rows) {
+  const groups = [];
+  rows.forEach(function (r) {
+    const key = mentionKeys_(r.name, r.brand);
+    const urls = lines_(r.source_url);
+    const lists = {};
+    MENTION_LISTS.forEach(function (c) { lists[c] = c === 'source_url' ? urls : listOf_(r[c], urls.length); });
+    let g = null;
+    for (let k = 0; k < groups.length && !g; k++) if (sameMention_(groups[k].key, key)) g = groups[k];
+    if (!g) {
+      groups.push({ key: key, row: Object.assign({}, r, { _merged: 1 }), lists: lists, notes: r.notes ? [String(r.notes)] : [] });
+      return;
+    }
+    const t = g.row;
+    t._merged++;
+    lists.source_url.forEach(function (u, i) {
+      if (g.lists.source_url.indexOf(u) !== -1) return;
+      MENTION_LISTS.forEach(function (c) { g.lists[c].push(lists[c][i]); });
+    });
+    ['kind', 'brand', 'why', 'price', 'topic', 'shop_link'].forEach(function (c) { if (!t[c] && r[c]) t[c] = r[c]; });
+    if ((!t.status || t.status === 'want') && r.status && r.status !== 'want') t.status = r.status;
+    if (r.saved_at && (!t.saved_at || new Date(r.saved_at) < new Date(t.saved_at))) t.saved_at = r.saved_at;
+    if (r.notes && g.notes.indexOf(String(r.notes)) === -1) g.notes.push(String(r.notes));
+  });
+  return groups.map(function (g) {
+    const r = g.row;
+    MENTION_LISTS.forEach(function (c) { r[c] = g.lists[c].join('\n'); });
+    r.times_mentioned = g.lists.source_url.length || 1;
+    r.notes = g.notes.join('\n');
+    return r;
+  });
+}
+
+/** Run from the editor to merge duplicate Mentions rows without the review. Backs the tab up first. */
+function mergeDuplicateMentions() {
+  const read = readMentions_();
+  const result = cleanMentions_({ count: read.count });
+  Logger.log(JSON.stringify(result));
 }
 
 function rowObject_(header, values) {

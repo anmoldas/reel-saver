@@ -78,6 +78,7 @@ every thing an idea recommends gets one row in **Mentions**: a shopping and to-t
 - `times_mentioned` counts the saves that recommend it, so something three creators recommend stands out. `from`, `creator` and `source_url` list each of those saves, one per line. `why` keeps the first save's reason.
 - names match loosely: case, accents and punctuation don't matter, and "Glaze Drops" by Kérastase matches "Kerastase Glaze Drops". a brand on its own ("Muji") stays separate from its products ("Muji Lip Essence").
 - places don't go here (they're in Places), and neither does anything the creator criticised, a giveaway prize or a credited source.
+- **tidying up older rows** (from before grouping and the stricter rules): `node scripts/clean-mentions.mjs --url https://YOUR-APP.vercel.app` asks Gemini to review every row and shows what it would remove, re-kind and merge, without changing anything. add `--apply` to do exactly that; the tab is copied to `Mentions (backup)` first. to only merge duplicates, run `mergeDuplicateMentions` from the Apps Script editor. don't run either while an import is going.
 - ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once from the editor to turn those into rows (kind, brand, why and price stay empty for them).
 
 ### topics
