@@ -48,8 +48,11 @@ const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'h
 // Instagram/TikTok image links expire within days, so thumbnails are copied to Drive.
 const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
+// Bump when this file changes, so a check of the web app shows which code is deployed.
+const SCRIPT_VERSION = 3;
+
 function doGet() {
-  return json_({ ok: true, service: 'reel-saver sheet' });
+  return json_({ ok: true, service: 'reel-saver sheet', version: SCRIPT_VERSION });
 }
 
 function doPost(e) {
@@ -130,6 +133,7 @@ function append_(type, rows) {
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(MENTION_STATUSES, true).build();
     sheet.getRange(start, statusCol + 1, values.length, 1).setDataValidation(rule);
   }
+  sortNewestFirst_(sheet);
   return values.length;
 }
 
@@ -300,6 +304,7 @@ function cleanMentions_(body) {
       const rule = SpreadsheetApp.newDataValidation().requireValueInList(MENTION_STATUSES, true).build();
       sheet.getRange(2, statusCol + 1, grouped.length, 1).setDataValidation(rule);
     }
+    sortNewestFirst_(sheet);
   }
   return result;
 }
@@ -601,6 +606,79 @@ function backfillMentions() {
   });
   mergeMentions_(rows);
   Logger.log('Added ' + rows.length + ' mentions.');
+}
+
+/** Newest saves at the top. Checkboxes and dropdowns move with their rows. */
+function sortNewestFirst_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 3) return;
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const col = header.indexOf('saved_at');
+  if (col === -1) return;
+  sheet.getRange(2, 1, last - 1, header.length).sort({ column: col + 1, ascending: false });
+}
+
+/** Run once from the editor to sort the tabs you already have; new saves keep them sorted. */
+function sortAllTabs() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  Object.keys(TABS).forEach(function (type) {
+    const sheet = ss.getSheetByName(TABS[type].name);
+    if (sheet) sortNewestFirst_(sheet);
+  });
+  Logger.log('Sorted newest first.');
+}
+
+/**
+ * Run from the editor after adding a topic: Ideas filed under "Other" whose suggested_topic is now on
+ * the Topics tab move to it (and their Mentions rows follow). Other rows are left alone.
+ */
+function applyNewTopics() {
+  Logger.log(JSON.stringify(applyNewTopics_()));
+}
+
+function applyNewTopics_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const byName = {};
+  readTopics_().forEach(function (t) { byName[t.toLowerCase()] = t; });
+  const moved = {};
+  const ideas = ss.getSheetByName(TABS.idea.name);
+  let ideasMoved = 0;
+  if (ideas && ideas.getLastRow() >= 2) {
+    const header = header_(ideas, TABS.idea.columns);
+    const range = ideas.getRange(2, 1, ideas.getLastRow() - 1, header.length);
+    const data = range.getValues();
+    const topic = header.indexOf('topic');
+    const suggested = header.indexOf('suggested_topic');
+    const url = header.indexOf('source_url');
+    data.forEach(function (r) {
+      const target = byName[String(r[suggested] || '').trim().toLowerCase()];
+      if (String(r[topic]).toLowerCase() !== 'other' || !target) return;
+      r[topic] = target;
+      r[suggested] = '';
+      moved[r[url]] = target;
+      ideasMoved++;
+    });
+    if (ideasMoved) range.setValues(data.map(function (r) { return r.map(function (v, c) { return cell_(header[c], v); }); }));
+  }
+  const mentions = ss.getSheetByName(TABS.mention.name);
+  let mentionsMoved = 0;
+  if (ideasMoved && mentions && mentions.getLastRow() >= 2) {
+    const header = header_(mentions, TABS.mention.columns);
+    const range = mentions.getRange(2, 1, mentions.getLastRow() - 1, header.length);
+    const data = range.getValues();
+    const topic = header.indexOf('topic');
+    const url = header.indexOf('source_url');
+    data.forEach(function (r) {
+      if (String(r[topic]).toLowerCase() !== 'other') return;
+      const hit = lines_(r[url]).map(function (u) { return moved[u]; }).filter(String)[0];
+      if (hit) {
+        r[topic] = hit;
+        mentionsMoved++;
+      }
+    });
+    if (mentionsMoved) range.setValues(data.map(function (r) { return r.map(function (v, c) { return cell_(header[c], v); }); }));
+  }
+  return { ideas: ideasMoved, mentions: mentionsMoved };
 }
 
 /** Build step 1: run this from the editor to check the sheet with a hand-written row. */

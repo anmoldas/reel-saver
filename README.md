@@ -54,7 +54,7 @@ so roughly 500 tiktoks or 1,500 reels a month before Apify's free credit runs ou
 
 ## the sheet
 
-one tab per kind of save. columns are matched by name, so you can reorder them or add your own.
+one tab per kind of save, newest at the top: every save re-sorts its tab by `saved_at`, so imported old posts land in date order. columns are matched by name, so you can reorder them or add your own. (sheets from before this was added: run `sortAllTabs` once from the Apps Script editor.)
 
 | tab | what lands there | columns |
 |---|---|---|
@@ -86,6 +86,7 @@ every thing an idea recommends gets one row in **Mentions**: a shopping and to-t
 the **Topics** tab lists the idea topics (Travel tips, Clothing, Career, AI, Video editing, Journaling, Organization to start). Gemini must pick one of them or "Other".
 
 - **to add a topic**, add a row to the Topics tab. the next save uses it; no redeploy.
+- **after adding a topic**, run `applyNewTopics` from the Apps Script editor: ideas under "Other" whose `suggested_topic` matches it move over, and their Mentions rows follow.
 - **to find new topics**, filter Ideas to `topic = Other` now and then. the `suggested_topic` column says what Gemini would have called each one. if the same suggestion keeps appearing, add it to Topics.
 
 ### place types
