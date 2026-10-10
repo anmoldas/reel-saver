@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from '../api/share.js';
+import { retryDelaysMs } from '../src/errors.js';
 
 const post = (body: unknown) => POST(new Request('https://x/api/share', { method: 'POST', body: JSON.stringify(body) }));
 let sheet: any[];
@@ -52,7 +53,20 @@ describe('POST /api/share', () => {
   });
 });
 
+retryDelaysMs.splice(0, retryDelaysMs.length, 0, 0);
+
 describe('POST /api/share errors', () => {
+  it('retries a Sheet hiccup', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async (_u: string, init?: RequestInit) => {
+      if (calls++ === 0) return new Response('<html>Not found</html>', { status: 404 });
+      const body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ ok: true, exists: false, written: body.rows?.length ?? 0 }));
+    });
+    const res = await (await post({ url: 'https://www.instagram.com/reel/NEW/', secret: 'sek', stub: true })).json();
+    expect(res.message).toBe('Stub row written for https://www.instagram.com/reel/NEW/');
+  });
+
   it('returns a readable message when the sheet is unreachable', async () => {
     vi.stubGlobal('fetch', async () => new Response('<html>Sign in</html>', { status: 200 }));
     const res = await post({ url: 'https://www.instagram.com/reel/NEW/', secret: 'sek', stub: true });
