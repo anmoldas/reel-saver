@@ -13,7 +13,8 @@
 //   --dry-run            list what would be sent, send nothing
 //
 // It stops at the first error that is not about one video (out of Apify credit, Gemini's daily
-// limit, the Sheet not answering), or after 3 failures in a row. Deleted, private or very slow videos are skipped.
+// limit, the Sheet not answering), or after 3 failures in a row. Deleted, private or very slow videos are skipped,
+// and so is a video Gemini is too busy to watch right now (it is tried again on the next run).
 // The SECRET comes from .env.local (or the SECRET environment variable); it is never printed.
 // Progress is kept in .import-progress.json, so running the same command again picks up where it stopped.
 // Newest saves go first.
@@ -141,7 +142,7 @@ function saveProgress(link, entry) {
 // Outcomes that should not be retried on the next run.
 const FINAL = /Already saved|private or deleted|Post unavailable|Found nothing to save/i;
 // Failures that are about one video, so the import carries on.
-const PER_VIDEO = /private or deleted|Post unavailable|Found nothing to save|Video is too large|Could not download the (video|images)|Could not work out which post|Timed out after/i;
+const PER_VIDEO = /private or deleted|Post unavailable|Found nothing to save|Video is too large|Could not download the (video|images)|Could not work out which post|Timed out after|Gemini 503/i;
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
