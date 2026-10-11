@@ -264,7 +264,7 @@ the `scripts/` folder holds the tools you run from your computer: `setup.mjs`, `
 
 ## bonus: turn it into a dashboard
 
-a sheet is great for storing your faves, but a dashboard is nicer for browsing them. you can make one in a few minutes with [Claude](https://claude.ai) or Muse, no code needed: share your sheet and describe what you want. a search bar, topic filters, a map of every place in a city, ideas as cards with their takeaways, a "mark done" button. ask for whatever you'd actually use.
+a sheet is great for storing your faves, but a dashboard is nicer for browsing them. you can make one in a few minutes with [Claude](https://claude.ai) or Meta's [Muse](https://muse.ai), no code needed: share your sheet and describe what you want. a search bar, topic filters, a map of every place in a city, ideas as cards with their takeaways, a "mark done" button. ask for whatever you'd actually use.
 
 here's a prompt to start from. swap in your sheet's link:
 
