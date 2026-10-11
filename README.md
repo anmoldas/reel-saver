@@ -266,6 +266,15 @@ the `scripts/` folder holds the tools you run from your computer: `setup.mjs`, `
 
 a sheet is great for storing your faves, but a dashboard is nicer for browsing them. you can make one in a few minutes with [Claude](https://claude.ai) or Meta's [Muse](https://muse.ai), no code needed: share your sheet and describe what you want. a search bar, topic filters, a map of every place in a city, ideas as cards with their takeaways, a "mark done" button. ask for whatever you'd actually use.
 
+a few made from the same sheet:
+
+<img src="docs/dashboard-places.png" alt="a dark dashboard with a search bar, topic filters, tabs for places, ideas and mentions, and a color-coded map of places in New York City" width="100%">
+
+<p>
+  <img src="docs/dashboard-ideas.png" alt="idea cards with a summary, takeaways, the products mentioned and a link to the creator's video" width="49%">
+  <img src="docs/dashboard-recipes.png" alt="a light dashboard with counts of places, recipes and mentions, and recipe cards with ingredients and steps" width="49%">
+</p>
+
 here's a prompt to start from. swap in your sheet's link:
 
 > Build me a dashboard for my saved Instagram reels and TikToks. The data is in this Google Sheet: [YOUR SHEET LINK]. Read it live, so new saves show up when I refresh.
