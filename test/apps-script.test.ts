@@ -76,24 +76,20 @@ function load(driveApp: object = {}) {
     PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: driveApp, UrlFetchApp: {},
   };
   const src = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, tidy_, readFailed_, cityNames_, readPlaceNotes_, setPlaceNotes_, thumbnailFolder_ };`)(...Object.values(globals));
+  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, readFailed_, cityNames_, setPlaceNotes_, thumbnailFolder_ };`)(...Object.values(globals));
 }
 
 let gs: {
   mergeMentions_: (rows: object[]) => number;
   detachMentions_: (url: string) => void;
-  readMentions_: () => { count: number; rows: { row: number; name: string }[] };
-  cleanMentions_: (body: object) => any;
   append_: (type: string, rows: object[]) => number;
   applyNewTopics_: () => { ideas: number; mentions: number };
   guideNames_: () => string[];
   assignGuides_: (a: object[]) => { assigned: number };
   writeGuide_: (body: object) => { written: number; videos: number };
   write_: (url: string, rows: object[]) => { written: number; duplicate?: boolean; merged_places?: object[] };
-  readPlaceNotes_: () => { places: object[] };
   setPlaceNotes_: (updates: object[]) => { updated: number };
   check_: (url: string) => { exists: boolean; title?: string };
-  tidy_: (body: object) => any;
   readFailed_: () => { rows: { source_url: string; error: string }[] };
   cityNames_: () => string[];
 };
@@ -148,58 +144,6 @@ describe('Mentions grouping', () => {
     gs.mergeMentions_([m('Uniqlo', '', 'u1')]);
     gs.detachMentions_('u1');
     expect(mentions()).toHaveLength(1);
-  });
-});
-
-describe('Mentions cleanup', () => {
-  // Rows written the old way: one row per save, so duplicates sit side by side.
-  function oldStyle() {
-    gs.mergeMentions_([m('Claude', 'Anthropic', 'u1')]);
-    gs.mergeMentions_([m('Sensoji Temple', '', 'u2')]);
-    gs.mergeMentions_([m('Blom Kranz', '', 'u3', { kind: 'person' })]);
-    const rows = mentions();
-    const header = rows[0] as string[];
-    const dupe = [...rows[1]];
-    dupe[header.indexOf('source_url')] = 'u4';
-    dupe[header.indexOf('from')] = 'T u4';
-    dupe[header.indexOf('status')] = 'bought';
-    dupe[header.indexOf('notes')] = 'mine';
-    rows.push(dupe);
-  }
-
-  it('reads every row with its number', () => {
-    oldStyle();
-    const read = gs.readMentions_();
-    expect(read.count).toBe(4);
-    expect(read.rows.map((r) => [r.row, r.name])).toEqual([[2, 'Claude'], [3, 'Sensoji Temple'], [4, 'Blom Kranz'], [5, 'Claude']]);
-  });
-
-  it('previews without changing anything', () => {
-    oldStyle();
-    const before = JSON.stringify(mentions());
-    const r = gs.cleanMentions_({ count: 4, remove: [3], updates: [], dry_run: true });
-    expect(r).toMatchObject({ before: 4, removed: 1, after: 2, merged: ['Claude (2 rows)'] });
-    expect(JSON.stringify(mentions())).toBe(before);
-    expect(sheets['Mentions (backup)']).toBeUndefined();
-  });
-
-  it('backs up, removes, fixes kinds and merges, keeping status and notes', () => {
-    oldStyle();
-    const r = gs.cleanMentions_({ count: 4, remove: [3], updates: [{ row: 4, kind: 'brand', shop_link: 'https://shop/blom' }] });
-    expect(r).toMatchObject({ before: 4, removed: 1, after: 2 });
-    expect(sheets['Mentions (backup)'].rows).toHaveLength(5);
-    expect(mentions()).toHaveLength(3);
-    const claude = byName('Claude');
-    expect([field(claude, 'source_url'), field(claude, 'times_mentioned'), field(claude, 'status'), field(claude, 'notes')])
-      .toEqual(['u1\nu4', 2, 'bought', 'mine']);
-    expect([field(byName('Blom Kranz'), 'kind'), field(byName('Blom Kranz'), 'shop_link')]).toEqual(['brand', 'https://shop/blom']);
-    expect(mentions().some((r) => field(r, 'name') === 'Sensoji Temple')).toBe(false);
-  });
-
-  it('refuses a plan made before the tab changed', () => {
-    oldStyle();
-    expect(gs.cleanMentions_({ count: 3, remove: [2] })).toMatchObject({ ok: false });
-    expect(mentions()).toHaveLength(5);
   });
 });
 
@@ -323,36 +267,10 @@ describe('places', () => {
     expect(gs.cityNames_()).toEqual(['New York City', 'Tokyo']);
   });
 
-  it('tidies older rows: merges repeats, clears placeholders, evens out countries', () => {
-    // Rows written one per save, before merging existed.
-    gs.append_('place', [
-      p('Anne Frank House', 'u1', { city: 'Amsterdam', country: 'Netherlands', saved_at: '2025-09-03T00:00:00Z', place_id: 'AF' }),
-      p('Anne Frank House', 'u2', { city: 'Amsterdam', country: 'Netherlands', saved_at: '2025-09-04T00:00:00Z', place_id: 'AF', notes: 'book ahead', done: true }),
-      p('Joe', 'u3', { city: 'New York', country: 'United States', what_to_order: 'Not specified' }),
-    ]);
-    gs.append_('recipe', [{ type: 'recipe', saved_at: '2026-01-01T00:00:00Z', title: 'Soup', time: 'Not specified', servings: '2', source_url: 'r1' }]);
-    const preview = gs.tidy_({ dry_run: true });
-    expect(preview).toMatchObject({ count: 3, before: 3, after: 2, merged: ['Anne Frank House (Amsterdam): 2 rows'], placeholders: 2, countries: 1 });
-    expect(places()).toHaveLength(4); // nothing changed yet
-
-    expect(gs.tidy_({ count: 2 })).toMatchObject({ ok: false });
-    expect(gs.tidy_({ count: 3 })).toMatchObject({ ok: true, after: 2 });
-    expect(sheets['Places (backup)'].rows).toHaveLength(4);
-    expect(places()).toHaveLength(3);
-    const af = titled('Anne Frank House')[0];
-    expect([af[col('source_url')], af[col('times_saved')], af[col('done')], af[col('notes')]]).toEqual(['u1\nu2', 2, true, 'book ahead']);
-    expect(new Date(af[col('saved_at')] as Date).toISOString()).toBe('2025-09-03T00:00:00.000Z');
-    const joe = titled('Joe')[0];
-    expect([joe[col('country')], joe[col('what_to_order')], joe[col('times_saved')]]).toEqual(['USA', '', 1]);
-    const recipes = sheets.Recipes.rows;
-    expect(recipes[1][(recipes[0] as string[]).indexOf('time')]).toBe('');
-  });
-
   it('reports places whose notes now join several saves, and rewrites them by first link and title', () => {
     expect(gs.write_('u1', [p('Senso-ji', 'u1', { place_id: 'P1', what_to_order: 'omikuji' })]).merged_places).toEqual([]);
     const second = gs.write_('u2', [p('Sensoji Temple', 'u2', { place_id: 'P1', what_to_order: 'fortune slips' })]);
     expect(second.merged_places).toEqual([{ source_url: 'u1', title: 'Senso-ji', what_to_order: 'omikuji; fortune slips' }]);
-    expect(gs.readPlaceNotes_().places).toEqual(second.merged_places);
     expect(gs.setPlaceNotes_([{ source_url: 'u1', title: 'senso-ji', what_to_order: 'omikuji (fortune slips)' }])).toEqual({ ok: true, updated: 1 });
     expect(titled('Senso-ji')[0][col('what_to_order')]).toBe('omikuji (fortune slips)');
     expect(gs.setPlaceNotes_([{ source_url: 'u2', title: 'Senso-ji', what_to_order: 'x' }]).updated).toBe(0); // not its first link
@@ -366,7 +284,7 @@ describe('places', () => {
 
 describe('thumbnails folder', () => {
   function drive(names: string[]) {
-    const folders = names.map((name) => ({ name, setName(n: string) { this.name = n; return this; } }));
+    const folders = names.map((name) => ({ name }));
     const created: string[] = [];
     const api = {
       folders,
@@ -380,17 +298,10 @@ describe('thumbnails folder', () => {
     return api;
   }
 
-  it('renames the old Reel Saver folder instead of making a new one', () => {
-    const d = drive(['Reel Saver thumbnails']);
-    expect(load(d).thumbnailFolder_().name).toBe('Save Faves thumbnails');
-    expect(d.folders[0].name).toBe('Save Faves thumbnails');
-    expect(d.created).toEqual([]);
-  });
-
-  it('uses the Save Faves folder when there is one, and makes it when there is neither', () => {
-    const both = drive(['Save Faves thumbnails', 'Reel Saver thumbnails']);
-    expect(load(both).thumbnailFolder_()).toBe(both.folders[0]);
-    expect(both.folders[1].name).toBe('Reel Saver thumbnails');
+  it('uses the Save Faves folder when there is one, and makes it when there is not', () => {
+    const one = drive(['Save Faves thumbnails']);
+    expect(load(one).thumbnailFolder_()).toBe(one.folders[0]);
+    expect(one.created).toEqual([]);
     const none = drive([]);
     load(none).thumbnailFolder_();
     expect(none.created).toEqual(['Save Faves thumbnails']);
