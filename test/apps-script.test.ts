@@ -76,7 +76,7 @@ function load() {
     PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: {}, UrlFetchApp: {},
   };
   const src = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_ };`)(...Object.values(globals));
+  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, tidy_, readFailed_, cityNames_ };`)(...Object.values(globals));
 }
 
 let gs: {
@@ -89,6 +89,11 @@ let gs: {
   guideNames_: () => string[];
   assignGuides_: (a: object[]) => { assigned: number };
   writeGuide_: (body: object) => { written: number; videos: number };
+  write_: (url: string, rows: object[]) => { written: number; duplicate?: boolean };
+  check_: (url: string) => { exists: boolean; title?: string };
+  tidy_: (body: object) => any;
+  readFailed_: () => { rows: { source_url: string; error: string }[] };
+  cityNames_: () => string[];
 };
 const mentions = () => sheets.Mentions.rows;
 const field = (r: Row, c: string) => r[(mentions()[0] as string[]).indexOf(c)];
@@ -269,5 +274,80 @@ describe('guides', () => {
     gs.assignGuides_([{ source_url: 'u2', guide: 'Shopping' }]);
     gs.writeGuide_({ guide: 'Japan', takeaways: '' });
     expect(guideRows()).toHaveLength(0);
+  });
+});
+
+describe('places', () => {
+  const places = () => sheets.Places.rows;
+  const col = (c: string) => (places()[0] as string[]).indexOf(c);
+  const titled = (t: string) => places().filter((r) => r[col('title')] === t);
+  const p = (title: string, url: string, extra: object = {}) => ({
+    type: 'place', saved_at: '2026-01-01T00:00:00Z', title, city: 'Tokyo', country: 'Japan', source_url: url, creator: `@${url}`, ...extra,
+  });
+  // Stand-ins for the Topics and Place types tabs, so check_ does not create them with notes.
+  beforeEach(() => {
+    makeSheet('Topics').rows.push(['topic'], ['AI']);
+    makeSheet('Place types').rows.push(['place type'], ['cafe']);
+  });
+
+  it('adds a repeat save of the same place to its row', () => {
+    gs.write_('u1', [p('Senso-ji', 'u1', { place_id: 'P1', what_to_order: 'omikuji' })]);
+    gs.write_('u2', [p('Sensoji Temple', 'u2', { place_id: 'P1', what_to_order: 'go at night', address: '2-3 Asakusa' })]);
+    expect(places()).toHaveLength(2);
+    const r = titled('Senso-ji')[0];
+    expect([r[col('source_url')], r[col('creator')], r[col('times_saved')], r[col('what_to_order')], r[col('address')]])
+      .toEqual(['u1\nu2', '@u1\n@u2', 2, 'omikuji; go at night', '2-3 Asakusa']);
+  });
+
+  it('matches by name and city when a row has no place ID, but keeps different branches apart', () => {
+    gs.write_('u1', [p('Uniqlo', 'u1', { place_id: 'A' }), p('Cafe Kitsune', 'u1')]);
+    gs.write_('u2', [p('UNIQLO', 'u2', { place_id: 'B' }), p('cafe kitsune', 'u2', { place_id: 'C' })]);
+    expect(titled('Uniqlo')).toHaveLength(1);
+    expect(titled('UNIQLO')).toHaveLength(1);
+    expect(titled('Cafe Kitsune')[0][col('times_saved')]).toBe(2);
+    expect(titled('Cafe Kitsune')[0][col('place_id')]).toBe('C');
+  });
+
+  it('knows a post is saved when its link is one of several on a place row', () => {
+    gs.write_('u1', [p('Senso-ji', 'u1', { place_id: 'P1' })]);
+    gs.write_('u2', [p('Senso-ji', 'u2', { place_id: 'P1' })]);
+    expect(gs.check_('u2')).toMatchObject({ exists: true, title: 'Senso-ji' });
+    expect(gs.write_('u2', [p('Senso-ji', 'u2', { place_id: 'P1' })])).toMatchObject({ duplicate: true });
+  });
+
+  it('lists cities by number of places, in their most common spelling', () => {
+    gs.write_('u1', [p('A', 'u1', { city: 'New York City' }), p('B', 'u1', { city: 'New York City' }), p('C', 'u1', { city: 'new york city!' })]);
+    gs.write_('u2', [p('D', 'u2'), p('E', 'u2', { city: 'Not specified' })]);
+    expect(gs.cityNames_()).toEqual(['New York City', 'Tokyo']);
+  });
+
+  it('tidies older rows: merges repeats, clears placeholders, evens out countries', () => {
+    // Rows written one per save, before merging existed.
+    gs.append_('place', [
+      p('Anne Frank House', 'u1', { city: 'Amsterdam', country: 'Netherlands', saved_at: '2025-09-03T00:00:00Z', place_id: 'AF' }),
+      p('Anne Frank House', 'u2', { city: 'Amsterdam', country: 'Netherlands', saved_at: '2025-09-04T00:00:00Z', place_id: 'AF', notes: 'book ahead', done: true }),
+      p('Joe', 'u3', { city: 'New York', country: 'United States', what_to_order: 'Not specified' }),
+    ]);
+    gs.append_('recipe', [{ type: 'recipe', saved_at: '2026-01-01T00:00:00Z', title: 'Soup', time: 'Not specified', servings: '2', source_url: 'r1' }]);
+    const preview = gs.tidy_({ dry_run: true });
+    expect(preview).toMatchObject({ count: 3, before: 3, after: 2, merged: ['Anne Frank House (Amsterdam): 2 rows'], placeholders: 2, countries: 1 });
+    expect(places()).toHaveLength(4); // nothing changed yet
+
+    expect(gs.tidy_({ count: 2 })).toMatchObject({ ok: false });
+    expect(gs.tidy_({ count: 3 })).toMatchObject({ ok: true, after: 2 });
+    expect(sheets['Places (backup)'].rows).toHaveLength(4);
+    expect(places()).toHaveLength(3);
+    const af = titled('Anne Frank House')[0];
+    expect([af[col('source_url')], af[col('times_saved')], af[col('done')], af[col('notes')]]).toEqual(['u1\nu2', 2, true, 'book ahead']);
+    expect(new Date(af[col('saved_at')] as Date).toISOString()).toBe('2025-09-03T00:00:00.000Z');
+    const joe = titled('Joe')[0];
+    expect([joe[col('country')], joe[col('what_to_order')], joe[col('times_saved')]]).toEqual(['USA', '', 1]);
+    const recipes = sheets.Recipes.rows;
+    expect(recipes[1][(recipes[0] as string[]).indexOf('time')]).toBe('');
+  });
+
+  it('reads the Failed tab', () => {
+    gs.append_('failed', [{ saved_at: '2026-03-21T00:00:00Z', source_url: 'u9', error: 'Timed out after 240s' }]);
+    expect(gs.readFailed_().rows).toEqual([{ saved_at: '2026-03-21T00:00:00.000Z', source_url: 'u9', error: 'Timed out after 240s', creator: '' }]);
   });
 });

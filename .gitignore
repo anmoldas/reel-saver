@@ -6,3 +6,4 @@ node_modules
 .import-progress.json
 .mentions-cleanup-plan.json
 .guides-plan.json
+.tidy-plan.json

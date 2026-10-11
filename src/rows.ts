@@ -1,5 +1,5 @@
 import type { Mention, ParsedItem, PlaceMatch, Post, Row } from './types.js';
-import { mapsUrl } from './places.js';
+import { countryName, mapsUrl } from './places.js';
 
 // Each row's `type` picks its tab in the sheet: place → Places, recipe → Recipes,
 // idea → Ideas, failed → Failed. The Apps Script owns each tab's column list.
@@ -33,8 +33,9 @@ export function itemRow(base: Base, item: ParsedItem, match: PlaceMatch | null =
     const p = item.place;
     row.category = p.category;
     row.specialty = p.specialty;
-    row.city = p.city;
-    row.country = p.country || countryFromAddress(match?.address ?? '');
+    // Google's country is spelled the same every time; the post's city is kept (Google's can be a ward or borough).
+    row.city = p.city || match?.city || '';
+    row.country = match?.country || p.country || countryName(countryFromAddress(match?.address ?? ''));
     row.what_to_order = p.what_to_order;
     row.maps_url = match?.mapsUrl ?? mapsUrl(p.name, p.city);
     if (match) {

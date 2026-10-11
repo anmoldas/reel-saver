@@ -9,6 +9,9 @@
     },
     "api/guides.ts": {
       "maxDuration": 300
+    },
+    "api/maintenance.ts": {
+      "maxDuration": 60
     }
   }
 }

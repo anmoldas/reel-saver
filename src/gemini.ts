@@ -1,5 +1,6 @@
 import { DEFAULT_PLACE_TYPES, GUIDE_NAMING, MENTION_KINDS, OTHER, OTHER_PLACE, matchGuide, type Lists } from './topics.js';
 import { errorMessage, withRetry } from './errors.js';
+import { countryName } from './places.js';
 import type { Env, ItemType, Mention, ParsedItem, ParseResult, Post } from './types.js';
 
 const BASE = 'https://generativelanguage.googleapis.com';
@@ -77,12 +78,15 @@ export function responseSchema({ topics, placeTypes }: Lists) {
   };
 }
 
-export function instructions({ topics, placeTypes, guides }: Lists): string {
+export function instructions({ topics, placeTypes, guides, cities }: Lists): string {
   return `You turn a saved social media post into structured notes.
 
 Classify what the post is worth saving for:
-- "place": a specific named restaurant, cafe, bar, shop, sight, activity or hotel someone could visit. Fill "place" with:
+- "place": a specific named restaurant, cafe, bar, shop, sight, activity or hotel someone could visit. A chain recommended in general, with no particular branch (a convenience store chain, a drugstore chain), is not a place: name it in an idea's "mentioned" as a store. Fill "place" with:
   - "name", "city" and "country".
+  - "city": the city itself, not a neighbourhood, borough or ward (a spot in Brooklyn or Flushing is in "New York City", one in Shibuya or Asakusa is in "Tokyo"). A separate town nearby keeps its own name.${cities.length ? `
+    Places already saved are in these cities; use the same spelling when it is one of them: ${cities.map((c) => `"${c}"`).join(', ')}.` : ''}
+  - "country": its short English name, e.g. "Japan", "USA", "UK".
   - "category": one of ${placeTypes.map((t) => `"${t}"`).join(', ')}. Pick the closest; use "${OTHER_PLACE}" only if none fit.
   - "specialty": a few words on what exactly it is (e.g. "ceramics and glassware store", "natural wine bar", "ramen").
   - "what_to_order": what to order, buy or do there.
@@ -111,6 +115,7 @@ Rules:
 - "title" is short (the place name, the dish, or what the idea is about). "summary" is one line on why it is worth saving.
 - "confidence" is 0 to 1: how sure you are that the item is complete and correct.
 - Never invent ingredients, steps, places, cities or takeaways. If something is missing, leave it empty and lower the confidence.
+- An unknown field is an empty string. Never write placeholders like "Not specified", "N/A" or "Various", and never add notes about what is missing.
 - Set "needs_video" to true when the text alone is not enough, for example a recipe whose steps are only spoken in the video, a place whose name or city is only shown on screen, or tips that are only said out loud.
 - Set "just_for_fun" to true, with no items, when the post is only entertainment: jokes, skits, memes, relatable humour, pranks, dances, reactions, pets, or a personal vlog with nothing someone could visit, cook, buy or learn. A funny post that still names a real place, product or useful tip is not just for fun: return those items. If the text alone cannot tell, set "needs_video" instead.
 - Write in English.`;
@@ -139,7 +144,7 @@ async function askJsonOnce(env: Env, system: string, parts: unknown[], schema: u
     }),
   });
   const body = await res.text();
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${body.slice(0, 300)}`);
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${apiError(body)}`);
   const data = JSON.parse(body);
   const text: string = (data.candidates?.[0]?.content?.parts ?? [])
     .filter((p: any) => typeof p.text === 'string' && !p.thought)
@@ -147,6 +152,15 @@ async function askJsonOnce(env: Env, system: string, parts: unknown[], schema: u
     .join('');
   if (!text) throw new Error(`Gemini returned no text (${data.candidates?.[0]?.finishReason ?? 'no candidates'})`);
   return JSON.parse(text);
+}
+
+/** The message from a Google API error body ({"error": {"message", "status"}}), on one line. */
+export function apiError(body: string): string {
+  try {
+    const e = JSON.parse(body)?.error;
+    if (typeof e?.message === 'string') return `${e.status ? `${e.status}: ` : ''}${e.message}`.replace(/\s+/g, ' ').trim();
+  } catch {}
+  return body.replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
 async function generate(env: Env, lists: Lists, parts: unknown[]): Promise<ParseResult> {
@@ -241,7 +255,15 @@ export function needsVideo(result: ParseResult, threshold: number): string | nul
 const TYPES: ItemType[] = ['recipe', 'place', 'idea'];
 
 const s = (v: unknown): string => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
-const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(s).filter(Boolean) : []);
+// What models write instead of leaving a field empty.
+const PLACEHOLDER = /^(not (specified|mentioned|stated|provided|given|available)|unknown|various|n\/?a|none|tbd|-+|—)\.?$/i;
+
+/** Like s(), but a placeholder such as "Not specified" becomes empty. */
+const filled = (v: unknown): string => {
+  const t = s(v);
+  return PLACEHOLDER.test(t) ? '' : t;
+};
+const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(filled).filter(Boolean) : []);
 
 /** Case-insensitive match against a fixed list, else the fallback. */
 function pick(value: unknown, options: string[], fallback: string): string {
@@ -256,13 +278,13 @@ function mentions(v: unknown): Mention[] {
     if (typeof m === 'string') return m.trim() ? [{ name: m.trim(), kind: 'product', brand: '', why: '', price: '' }] : [];
     const name = s(m?.name);
     if (!name) return [];
-    return [{ name, kind: pick(m?.kind, MENTION_KINDS, 'product'), brand: s(m?.brand), why: s(m?.why), price: s(m?.price) }];
+    return [{ name, kind: pick(m?.kind, MENTION_KINDS, 'product'), brand: filled(m?.brand), why: filled(m?.why), price: filled(m?.price) }];
   });
 }
 
 export function normalizeParse(
   raw: any,
-  { topics, placeTypes, guides }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE], guides: [] },
+  { topics, placeTypes, guides }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE], guides: [], cities: [] },
 ): ParseResult {
   const items: ParsedItem[] = (Array.isArray(raw?.items) ? raw.items : []).flatMap((it: any): ParsedItem[] => {
     const type = TYPES.includes(it?.type) ? (it.type as ItemType) : 'idea';
@@ -278,17 +300,17 @@ export function normalizeParse(
     };
     if (type === 'recipe') {
       const r = it?.recipe ?? {};
-      item.recipe = { ingredients: list(r.ingredients), steps: list(r.steps), servings: s(r.servings), time: s(r.time) };
+      item.recipe = { ingredients: list(r.ingredients), steps: list(r.steps), servings: filled(r.servings), time: filled(r.time) };
     } else if (type === 'place') {
       const p = it?.place ?? {};
       item.place = {
         name: s(p.name) || item.title,
-        city: s(p.city),
-        country: s(p.country),
+        city: filled(p.city),
+        country: countryName(filled(p.country)),
         category: pick(p.category, placeTypes, OTHER_PLACE),
         // A category the model invented is kept as the specialty rather than lost.
-        specialty: s(p.specialty) || (pick(p.category, placeTypes, '') ? '' : s(p.category)),
-        what_to_order: s(p.what_to_order),
+        specialty: filled(p.specialty) || (pick(p.category, placeTypes, '') ? '' : filled(p.category)),
+        what_to_order: filled(p.what_to_order),
       };
     } else {
       const r = it?.idea ?? {};

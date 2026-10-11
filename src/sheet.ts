@@ -27,11 +27,11 @@ async function callOnce(env: Env, payload: Record<string, unknown>): Promise<any
   return data;
 }
 
-/** Is this URL already saved (ignoring failed rows)? Also returns the Topics and Place types tabs and the guide names. */
+/** Is this URL already saved (ignoring failed rows)? Also returns the Topics and Place types tabs, the guide names and the cities. */
 export async function findExisting(
   env: Env,
   sourceUrl: string,
-): Promise<{ exists: boolean; title?: string; type?: string; topics?: string[]; place_types?: string[]; guides?: string[] }> {
+): Promise<{ exists: boolean; title?: string; type?: string; topics?: string[]; place_types?: string[]; guides?: string[]; cities?: string[] }> {
   return call(env, { action: 'check', source_url: sourceUrl });
 }
 
@@ -81,4 +81,23 @@ export async function guideVideos(env: Env, guide: string): Promise<GuideVideo[]
 /** Writes a guide's row (or removes it when the guide has fewer than two videos). */
 export async function writeGuide(env: Env, guide: string, summary: string, takeaways: string): Promise<{ written: number; videos: number }> {
   return call(env, { action: 'writeGuide', guide, summary, takeaways });
+}
+
+/** Every Failed row, for retrying the ones that might work now. */
+export async function readFailed(env: Env): Promise<{ saved_at: string; source_url: string; error: string; creator: string }[]> {
+  return (await call(env, { action: 'failed' })).rows ?? [];
+}
+
+export interface TidyResult {
+  count: number;
+  before: number;
+  after: number;
+  merged: string[];
+  placeholders: number;
+  countries: number;
+}
+
+/** Merges repeat places, blanks placeholder cells and evens out country names (or, with dryRun, reports it). */
+export async function tidySheet(env: Env, count: number | null, dryRun: boolean): Promise<TidyResult> {
+  return call(env, { action: 'tidy', count, dry_run: dryRun });
 }

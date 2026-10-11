@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeItem } from '../src/apify.js';
 import { PermanentError } from '../src/errors.js';
-import { needsVideo, normalizeParse } from '../src/gemini.js';
+import { apiError, needsVideo, normalizeParse } from '../src/gemini.js';
+import { cityAndCountry, countryName } from '../src/places.js';
 import { countryFromAddress, itemRow, mentionRows, shopLink, summarize } from '../src/rows.js';
 import { DEFAULT_PLACE_TYPES, DEFAULT_TOPICS, lists, placeTypeList, topicList } from '../src/topics.js';
 
@@ -252,5 +253,48 @@ describe('mentions', () => {
   it('has no mentions for places and recipes', () => {
     const [place] = normalizeParse({ items: [{ type: 'place', title: 'A', place: { name: 'A' } }] }).items;
     expect(mentionRows(base, place)).toEqual([]);
+  });
+});
+
+describe('placeholders and place names', () => {
+  it('blanks "Not specified" and the like instead of saving them', () => {
+    const { items } = normalizeParse({
+      items: [
+        { type: 'recipe', title: 'Soup', confidence: 1, recipe: { ingredients: ['leeks', 'N/A'], steps: ['boil'], servings: 'Not specified', time: 'Unknown.' } },
+        { type: 'place', title: 'JINS', confidence: 1, place: { name: 'JINS', city: 'Various', country: 'United States', what_to_order: 'not mentioned' } },
+      ],
+    });
+    expect(items[0].recipe).toEqual({ ingredients: ['leeks'], steps: ['boil'], servings: '', time: '' });
+    expect(items[1].place).toMatchObject({ city: '', country: 'USA', what_to_order: '' });
+    // An empty city now means the video gets a look.
+    expect(needsVideo({ items: [items[1]], needs_video: false, just_for_fun: false }, 0.7)).toMatch(/city/);
+  });
+
+  it('spells countries one way', () => {
+    expect(['United States', 'US', 'United Kingdom', 'Japan'].map(countryName)).toEqual(['USA', 'USA', 'UK', 'Japan']);
+  });
+
+  it('reads city and country from Google, with Tokyo wards as Tokyo', () => {
+    const part = (longText: string, ...types: string[]) => ({ longText, types });
+    expect(cityAndCountry([part('Shibuya City', 'locality'), part('Tokyo', 'administrative_area_level_1'), part('Japan', 'country')]))
+      .toEqual({ city: 'Tokyo', country: 'Japan' });
+    expect(cityAndCountry([part('Amsterdam', 'locality'), part('Netherlands', 'country')])).toEqual({ city: 'Amsterdam', country: 'Netherlands' });
+    expect(cityAndCountry([part('New York', 'locality'), part('United States', 'country')])).toEqual({ city: 'New York', country: 'USA' });
+    expect(cityAndCountry(undefined)).toEqual({ city: '', country: '' });
+  });
+
+  it("prefers Google's country and the post's city", () => {
+    const base = { savedAt: '2026-10-10T00:00:00Z', sourceUrl: 'https://u' };
+    const [item] = normalizeParse({ items: [{ type: 'place', title: 'Joe', confidence: 1, place: { name: 'Joe', city: 'New York City', country: 'America' } }] }).items;
+    const match = { placeId: 'P', city: 'New York', country: 'USA', address: '1 Main St, New York, NY 10001, USA', lat: 1, lng: 2, mapsUrl: 'https://m' };
+    expect(itemRow(base, item, match)).toMatchObject({ city: 'New York City', country: 'USA' });
+    const [noCity] = normalizeParse({ items: [{ type: 'place', title: 'Joe', confidence: 1, place: { name: 'Joe' } }] }).items;
+    expect(itemRow(base, noCity, match)).toMatchObject({ city: 'New York', country: 'USA' });
+  });
+
+  it('turns a Google error body into one line', () => {
+    const body = JSON.stringify({ error: { code: 503, message: 'This model is currently\n experiencing high demand.', status: 'UNAVAILABLE' } }, null, 2);
+    expect(apiError(body)).toBe('UNAVAILABLE: This model is currently experiencing high demand.');
+    expect(apiError('<html>\n oops')).toBe('<html> oops');
   });
 });
