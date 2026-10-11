@@ -262,6 +262,28 @@ curious how it works, or want to change something? every file starts with a shor
 
 the `scripts/` folder holds the tools you run from your computer: `setup.mjs`, `import-saves.mjs`, `retry-failed.mjs` and `build-guides.mjs`. each one explains itself at the top.
 
+## bonus: turn it into a dashboard
+
+a sheet is great for storing your faves, but a dashboard is nicer for browsing them. you can make one in a few minutes with [Claude](https://claude.ai) or Muse, no code needed: share your sheet and describe what you want. a search bar, topic filters, a map of every place in a city, ideas as cards with their takeaways, a "mark done" button. ask for whatever you'd actually use.
+
+here's a prompt to start from. swap in your sheet's link:
+
+> Build me a dashboard for my saved Instagram reels and TikToks. The data is in this Google Sheet: [YOUR SHEET LINK]. Read it live, so new saves show up when I refresh.
+>
+> The sheet has these tabs: **Places** (restaurants, shops and sights, with city, category, address, what to order, and a Maps link), **Recipes** (ingredients and steps), **Ideas** (tips with a topic and takeaways), **Mentions** (products, apps and brands the videos recommend) and **Guides** (ideas on the same subject combined). Every row has a creator, a source link and a "done" checkbox.
+>
+> I'd like:
+> - a search bar across everything
+> - tabs for places, recipes, ideas and mentions, each showing how many there are
+> - for places, a city picker and a map of that city with a pin per place, color-coded by category
+> - topic filters for ideas, with each idea as a card showing its summary, takeaways, what it mentions, and a link to the original video
+> - for recipes, ingredients and steps I can expand
+> - a way to filter by creator and hide what I've marked done
+>
+> Make it clean and easy to read on my phone.
+
+then keep asking for changes until it feels like yours: "make it dark mode", "group places by neighborhood", "show my most-mentioned products first".
+
 ## develop
 
 ```sh
