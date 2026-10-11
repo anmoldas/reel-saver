@@ -42,6 +42,8 @@ export interface Lists {
   placeTypes: string[];
   /** Guide names already in use. Unlike topics, a new one can be added. */
   guides: string[];
+  /** Cities in the Places tab, most places first, so the same city is spelled the same way. */
+  cities: string[];
 }
 
 /** Clean list from the sheet (or the defaults), with blanks and duplicates removed and `last` at the end. */
@@ -62,16 +64,18 @@ export function placeTypeList(fromSheet: unknown): string[] {
   return cleanList(fromSheet, DEFAULT_PLACE_TYPES, OTHER_PLACE);
 }
 
-export function guideList(fromSheet: unknown): string[] {
+/** Names from the sheet with blanks and repeats (ignoring case) removed, at most `max`. */
+export function guideList(fromSheet: unknown, max = Infinity): string[] {
   if (!Array.isArray(fromSheet)) return [];
   const seen = new Set<string>();
   return fromSheet
     .map((t) => (typeof t === 'string' ? t.trim() : ''))
-    .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
+    .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .slice(0, max);
 }
 
-export function lists(topics?: unknown, placeTypes?: unknown, guides?: unknown): Lists {
-  return { topics: topicList(topics), placeTypes: placeTypeList(placeTypes), guides: guideList(guides) };
+export function lists(topics?: unknown, placeTypes?: unknown, guides?: unknown, cities?: unknown): Lists {
+  return { topics: topicList(topics), placeTypes: placeTypeList(placeTypes), guides: guideList(guides), cities: guideList(cities, 80) };
 }
 
 /** An existing guide's spelling when the name matches one (ignoring case), else the name as given. */

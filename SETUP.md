@@ -125,7 +125,7 @@ Finish with a short tour in plain words:
 - **Mentions**: every product, app, brand or book an idea recommends, with a shopping link, a want / bought / tried / skip dropdown, and how many saves mention it.
 - **Guides**: ideas on the same subject (a trip like "Japan", or a skill like "Video editing") share a guide, and once a guide has two videos it gets one row here with all their takeaways combined, without repeats.
 - **Topics** and **Place types** tabs: these are the lists Gemini sorts into. Encourage them to replace the starter topics with their own interests (e.g. Fitness, Skincare, Home). Adding a row is all it takes; no code. Ideas that fit nothing land in **Other** with a **suggested_topic**, which shows which topics to add.
-- **Failed** tab: anything that couldn't be saved, with the reason. Sharing the same link again retries it.
+- **Failed** tab: anything that couldn't be saved, with the reason. Sharing the same link again retries it, or `node scripts/retry-failed.mjs --url https://<their-app>.vercel.app` retries every one that might work now.
 - Sharing the same post twice says "Already saved".
 - Posts that are just for fun (jokes, memes, skits) say "Skipped: just for fun" and add no row.
 
@@ -173,7 +173,7 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 | Failed: `Gemini 429` | Free-tier limit: too many saves in a minute, or (if it says "exceeded your current quota") the day's allowance is used up | Per-minute: wait a minute and share again. Daily: wait until after midnight Pacific time; an import picks up where it stopped. |
 | "Skipped: just for fun" | Gemini judged the post to be only entertainment, so no row was added | Expected. If it got one wrong, there's no override yet; sharing again will usually give the same answer. |
 | Failed: `Found nothing to save in this post` | Gemini couldn't find a place, recipe or tip, but wasn't sure it was just for fun | Usually nothing to fix. Delete the Failed row if they don't care about it. |
-| Failed: `Timed out after 240s` | A slow scrape or long video | Share again. |
+| Failed: `Timed out after 240s` or `Gemini 503` | A slow scrape or long video, or Gemini was busy | Share again, or run `scripts/retry-failed.mjs` to retry all of these at once. |
 | A place has no address or coordinates | No `PLACES_API_KEY` (optional), or Places couldn't find it | Expected without Places. Otherwise the Maps link still works. |
 | Shortcut shows nothing or an error page | Wrong URL in the Shortcut | It must be the app address followed by `/api/share`. |
 | A test reaches a Vercel login page | Deployment Protection is on for production | Project → Settings → Deployment Protection → leave production unprotected. |

@@ -68,7 +68,7 @@ one tab per kind of save, newest at the top. every save re-sorts its tab by `sav
 
 | tab | what lands there | columns |
 |---|---|---|
-| **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, specialty, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, creator, source_url, thumbnail_url, notes` |
+| **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, specialty, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, times_saved, creator, source_url, thumbnail_url, notes` |
 | **Recipes** | anything you'd cook | `saved_at, done, title, summary, time, servings, ingredients, steps, creator, source_url, thumbnail_url, notes` |
 | **Ideas** | everything else: tips, advice, how-tos, products, outfits, tools | `saved_at, done, topic, guide, title, summary, takeaways, mentioned, suggested_topic, creator, source_url, thumbnail_url, notes` |
 | **Guides** | one row per subject with two or more ideas, their takeaways combined | `saved_at, done, guide, topic, videos, summary, takeaways, from, creator, source_url, notes` |
@@ -76,9 +76,13 @@ one tab per kind of save, newest at the top. every save re-sorts its tab by `sav
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
 - place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
+- **each place has one row.** when another post recommends a place you already have, its link and creator are added to that row (one per line), `times_saved` goes up, and anything new it says to order joins `what_to_order`. a place is the same when Google gives it the same place ID, or, without one, the same name in the same city. two branches of a chain stay separate.
+- `country` comes from Google's address when the place is found there, so it's spelled the same every time ("USA", "Japan"). `city` is the city, not the neighbourhood (Brooklyn and Flushing are New York City, Shibuya is Tokyo), spelled the way your sheet already spells it.
+- a field the post doesn't say stays empty, never "Not specified".
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
 - **older sheets:** run `sortAllTabs` once to put existing rows newest first.
+- **older sheets:** to merge places saved more than once, clear "Not specified" cells from Places and Recipes and spell countries one way, run `node scripts/tidy-sheet.mjs --url https://YOUR-APP.vercel.app`. it shows what it would change without changing anything; add `--apply` to do exactly that. Places is copied to `Places (backup)` first. don't run it while an import is going.
 
 notes marked **older sheets** are one-time fixes for sheets made before a feature was added; a new sheet doesn't need them. functions like `sortAllTabs` run from the Apps Script editor: pick the function in the dropdown and click Run.
 
@@ -170,7 +174,7 @@ iOS share sheet ──▶ Vercel function (api/share.ts)
                           → Google Places → Apps Script → Google Sheet
 ```
 
-the shortcut waits up to 20 seconds. if the save finishes in that time you get "Saved place: X", otherwise "Saving…" and the row shows up a bit later. posts that are just for fun get "Skipped: just for fun". anything that fails still gets a row in the **Failed** tab with the error, and sharing the same link again retries it.
+the shortcut waits up to 20 seconds. if the save finishes in that time you get "Saved place: X", otherwise "Saving…" and the row shows up a bit later. posts that are just for fun get "Skipped: just for fun". anything that fails still gets a row in the **Failed** tab with the error, and sharing the same link again retries it. to retry everything there that might work now (Gemini was busy, a save timed out), run `node scripts/retry-failed.mjs --url https://YOUR-APP.vercel.app`; add `--dry-run` to only list them. deleted or private posts, and posts with nothing to save, are left alone. each save that works removes its Failed row.
 
 ## doing it by hand
 

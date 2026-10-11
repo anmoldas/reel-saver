@@ -73,6 +73,9 @@ export interface ParseResult {
 
 export interface PlaceMatch {
   placeId: string;
+  /** From the address; empty when Google has none. */
+  city?: string;
+  country?: string;
   address: string;
   lat: number | null;
   lng: number | null;

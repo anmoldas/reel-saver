@@ -14,7 +14,7 @@ const TABS = {
   place: {
     name: 'Places',
     columns: ['saved_at', 'done', 'title', 'category', 'specialty', 'city', 'country', 'address', 'what_to_order', 'summary',
-      'maps_url', 'lat', 'lng', 'place_id', 'creator', 'source_url', 'thumbnail_url', 'notes'],
+      'maps_url', 'lat', 'lng', 'place_id', 'times_saved', 'creator', 'source_url', 'thumbnail_url', 'notes'],
   },
   recipe: {
     name: 'Recipes',
@@ -54,7 +54,7 @@ const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'h
 const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
 // Bump when this file changes, so a check of the web app shows which code is deployed.
-const SCRIPT_VERSION = 4;
+const SCRIPT_VERSION = 5;
 
 function doGet() {
   return json_({ ok: true, service: 'save-faves sheet', version: SCRIPT_VERSION });
@@ -81,6 +81,8 @@ function doPost(e) {
     if (body.action === 'assignGuides') return json_(assignGuides_(body.assignments || []));
     if (body.action === 'guideVideos') return json_({ ok: true, videos: guideVideos_(body.guide) });
     if (body.action === 'writeGuide') return json_(writeGuide_(body));
+    if (body.action === 'failed') return json_(readFailed_());
+    if (body.action === 'tidy') return json_(tidy_(body));
     return json_({ ok: false, error: 'Unknown action: ' + body.action });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -89,11 +91,12 @@ function doPost(e) {
   }
 }
 
-/** Is this URL already saved in Places, Recipes or Ideas? Also returns the topic, place type and guide lists. */
+/** Is this URL already saved in Places, Recipes or Ideas? Also returns the topic, place type, guide and city lists. */
 function check_(sourceUrl) {
   const found = savedRows_(sourceUrl);
   const result = {
     ok: true, exists: found.length > 0, topics: readTopics_(), place_types: readPlaceTypes_(), guides: guideNames_(),
+    cities: cityNames_(),
   };
   if (found.length) {
     result.title = found[0].title;
@@ -111,21 +114,245 @@ function write_(sourceUrl, rows) {
   deleteRowsFor_(sheetFor_('failed'), sourceUrl);
   detachMentions_(sourceUrl);
 
+  // Thumbnails are copied only for rows that become new rows (a repeat place joins an existing row).
   const thumbCache = {};
-  const byType = {};
-  rows.forEach(function (row) {
-    const type = TABS[row.type] ? row.type : 'idea';
-    if (row.thumbnail_url && CONTENT_TYPES.indexOf(type) !== -1) {
+  const withThumbnail = function (row) {
+    if (row.thumbnail_url) {
       thumbCache[row.thumbnail_url] = thumbCache[row.thumbnail_url] || saveThumbnail_(row.thumbnail_url);
       row.thumbnail_url = thumbCache[row.thumbnail_url];
     }
+    return row;
+  };
+  const byType = {};
+  rows.forEach(function (row) {
+    const type = TABS[row.type] ? row.type : 'idea';
     (byType[type] = byType[type] || []).push(row);
   });
   let written = 0;
   Object.keys(byType).forEach(function (type) {
-    written += type === 'mention' ? mergeMentions_(byType[type]) : append_(type, byType[type]);
+    if (type === 'mention') written += mergeMentions_(byType[type]);
+    else if (type === 'place') written += mergePlaces_(byType[type], withThumbnail);
+    else written += append_(type, CONTENT_TYPES.indexOf(type) !== -1 ? byType[type].map(withThumbnail) : byType[type]);
   });
   return { ok: true, written: written };
+}
+
+// ---- Places: one row per place, listing every save that recommends it ----
+// source_url and creator hold one line per save, in the same order; times_saved counts them.
+
+const PLACE_LISTS = ['source_url', 'creator'];
+// Filled from a later save when the row has them blank.
+const PLACE_FILL = ['category', 'specialty', 'city', 'country', 'address', 'summary', 'maps_url', 'lat', 'lng', 'place_id'];
+
+function placeKey_(row) {
+  return { id: String(row.place_id || '').trim(), name: norm_(row.title), city: norm_(row.city) };
+}
+
+/** Same place: the same Google place, or the same name in the same city when one side has no place ID. */
+function samePlace_(a, b) {
+  if (a.id && b.id) return a.id === b.id;
+  return a.name !== '' && a.name === b.name && a.city === b.city;
+}
+
+/** "coffee" + "matcha latte" → "coffee; matcha latte". A part already there is not repeated. */
+function combineText_(a, b) {
+  const parts = String(a || '').split(';').map(function (x) { return x.trim(); }).filter(String);
+  const have = parts.map(norm_);
+  String(b || '').split(';').map(function (x) { return x.trim(); }).filter(String).forEach(function (x) {
+    if (have.indexOf(norm_(x)) === -1) { parts.push(x); have.push(norm_(x)); }
+  });
+  return parts.join('; ');
+}
+
+/** Adds a later save of the same place to `target`: its link and creator, what to order, and any blanks. */
+function addPlaceSave_(target, row) {
+  const urls = lines_(target.source_url);
+  lines_(row.source_url).forEach(function (url, i) {
+    if (urls.indexOf(url) !== -1) return;
+    const creators = listOf_(target.creator, urls.length);
+    creators.push(listOf_(row.creator, lines_(row.source_url).length)[i] || '');
+    urls.push(url);
+    target.source_url = urls.join('\n');
+    target.creator = creators.join('\n');
+  });
+  target.times_saved = urls.length;
+  target.what_to_order = combineText_(target.what_to_order, row.what_to_order);
+  PLACE_FILL.forEach(function (c) { if ((target[c] === '' || target[c] === undefined || target[c] === null) && row[c]) target[c] = row[c]; });
+}
+
+/** Adds each place to the row for the same place, or appends a new row. Returns rows touched. */
+function mergePlaces_(rows, prepareNew) {
+  const sheet = sheetFor_('place');
+  const header = header_(sheet, TABS.place.columns);
+  const last = sheet.getLastRow();
+  const data = last < 2 ? [] : sheet.getRange(2, 1, last - 1, header.length).getValues();
+  const keys = data.map(function (r) { return placeKey_(rowObject_(header, r)); });
+  const changed = {};
+  const fresh = [];
+
+  rows.forEach(function (row) {
+    const key = placeKey_(row);
+    let i = -1;
+    for (let k = 0; k < keys.length && i === -1; k++) if (samePlace_(keys[k], key)) i = k;
+    for (let k = 0; k < fresh.length && i === -1; k++) if (samePlace_(placeKey_(fresh[k]), key)) i = data.length + k;
+    if (i === -1) {
+      fresh.push(Object.assign(prepareNew ? prepareNew(row) : row, { times_saved: 1 }));
+      return;
+    }
+    const target = i < data.length ? rowObject_(header, data[i]) : fresh[i - data.length];
+    addPlaceSave_(target, row);
+    if (i < data.length) {
+      data[i] = header.map(function (c) { return target[c]; });
+      keys[i] = placeKey_(target);
+      changed[i] = true;
+    }
+  });
+
+  Object.keys(changed).forEach(function (i) {
+    sheet.getRange(Number(i) + 2, 1, 1, header.length).setValues([data[i].map(function (v, c) { return cell_(header[c], v); })]);
+  });
+  return Object.keys(changed).length + append_('place', fresh);
+}
+
+/** The cities in the Places tab, most places first, each spelled the way most rows spell it. */
+function cityNames_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.place.name);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const header = header_(sheet, TABS.place.columns);
+  const col = header.indexOf('city');
+  const counts = {};
+  const spellings = {};
+  sheet.getRange(2, col + 1, sheet.getLastRow() - 1, 1).getValues().forEach(function (r) {
+    const name = String(r[0] || '').trim();
+    const key = norm_(name);
+    if (!key || PLACEHOLDER_.test(name)) return;
+    counts[key] = (counts[key] || 0) + 1;
+    spellings[key] = spellings[key] || {};
+    spellings[key][name] = (spellings[key][name] || 0) + 1;
+  });
+  return Object.keys(counts)
+    .sort(function (a, b) { return counts[b] - counts[a]; })
+    .map(function (key) {
+      return Object.keys(spellings[key]).sort(function (a, b) { return spellings[key][b] - spellings[key][a]; })[0];
+    });
+}
+
+// ---- One-time tidy (scripts/tidy-sheet.mjs drives it) ----
+
+const PLACES_BACKUP = 'Places (backup)';
+// What the model wrote instead of leaving a field empty, before the parser cleared these itself.
+const PLACEHOLDER_ = /^(not (specified|mentioned|stated|provided|given|available)|unknown|various|n\/?a|none|tbd|-+|—)\.?$/i;
+const PLACEHOLDER_COLUMNS = {
+  place: ['category', 'specialty', 'city', 'country', 'address', 'what_to_order'],
+  recipe: ['time', 'servings'],
+};
+const COUNTRY_NAMES = {
+  'united states': 'USA', 'united states of america': 'USA', 'us': 'USA', 'u.s.': 'USA', 'u.s.a.': 'USA',
+  'united kingdom': 'UK', 'great britain': 'UK', 'u.k.': 'UK',
+};
+
+/** Blanks placeholder cells in the given columns of row objects. Returns how many. */
+function clearPlaceholders_(rows, columns) {
+  let n = 0;
+  rows.forEach(function (r) {
+    columns.forEach(function (c) {
+      if (typeof r[c] === 'string' && PLACEHOLDER_.test(r[c].trim())) { r[c] = ''; n++; }
+    });
+  });
+  return n;
+}
+
+/**
+ * Merges places saved more than once into one row each, blanks "Not specified"-style cells in Places and
+ * Recipes, and writes "United States" and the like the way the rest of the sheet does ("USA").
+ * { count, dry_run }: count is the Places row count from the preview; a different count means the tab
+ * changed since, and nothing is done. Backs Places up to "Places (backup)" first.
+ */
+function tidy_(body) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(TABS.place.name);
+  const header = sheet ? header_(sheet, TABS.place.columns) : [];
+  const data = sheet && sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues() : [];
+  if (!body.dry_run && Number(body.count) !== data.length) {
+    return { ok: false, error: 'The Places tab changed since the preview (' + data.length + ' rows, expected ' + body.count + '). Run the preview again.' };
+  }
+  const rows = data.map(function (v) { return rowObject_(header, v); });
+  let placeholders = clearPlaceholders_(rows, PLACEHOLDER_COLUMNS.place);
+  let countries = 0;
+  rows.forEach(function (r) {
+    const name = COUNTRY_NAMES[String(r.country || '').trim().toLowerCase()];
+    if (name) { r.country = name; countries++; }
+  });
+
+  // Oldest first, so each merged row keeps its first save's date, wording and thumbnail.
+  const groups = [];
+  rows.slice().sort(function (a, b) { return new Date(a.saved_at) - new Date(b.saved_at); }).forEach(function (r) {
+    let g = null;
+    for (let k = 0; k < groups.length && !g; k++) if (samePlace_(placeKey_(groups[k].row), placeKey_(r))) g = groups[k];
+    if (!g) {
+      const row = Object.assign({}, r);
+      row.times_saved = lines_(row.source_url).length || 1;
+      groups.push({ row: row, merged: 1, notes: r.notes ? [String(r.notes)] : [] });
+      return;
+    }
+    g.merged++;
+    addPlaceSave_(g.row, r);
+    if (r.done === true) g.row.done = true;
+    if (r.notes && g.notes.indexOf(String(r.notes)) === -1) g.notes.push(String(r.notes));
+  });
+  const merged = groups.filter(function (g) { return g.merged > 1; }).map(function (g) {
+    return g.row.title + (g.row.city ? ' (' + g.row.city + ')' : '') + ': ' + g.merged + ' rows';
+  });
+
+  const recipes = ss.getSheetByName(TABS.recipe.name);
+  const recipeHeader = recipes ? header_(recipes, TABS.recipe.columns) : [];
+  const recipeData = recipes && recipes.getLastRow() >= 2 ? recipes.getRange(2, 1, recipes.getLastRow() - 1, recipeHeader.length).getValues() : [];
+  const recipeRows = recipeData.map(function (v) { return rowObject_(recipeHeader, v); });
+  const recipePlaceholders = clearPlaceholders_(recipeRows, PLACEHOLDER_COLUMNS.recipe);
+  placeholders += recipePlaceholders;
+
+  const result = {
+    ok: true, count: data.length, before: data.length, after: groups.length, merged: merged,
+    placeholders: placeholders, countries: countries,
+  };
+  if (body.dry_run) return result;
+
+  if (data.length) {
+    const old = ss.getSheetByName(PLACES_BACKUP);
+    if (old) ss.deleteSheet(old);
+    sheet.copyTo(ss).setName(PLACES_BACKUP);
+    const out = groups.map(function (g) {
+      g.row.notes = g.notes.join('\n');
+      return header.map(function (c) { return cell_(c, g.row[c]); });
+    });
+    sheet.getRange(2, 1, data.length, header.length).clearContent().clearDataValidations();
+    sheet.getRange(2, 1, out.length, header.length).setValues(out);
+    const doneCol = header.indexOf('done');
+    if (doneCol !== -1) sheet.getRange(2, doneCol + 1, out.length, 1).insertCheckboxes();
+    sortNewestFirst_(sheet);
+  }
+  if (recipePlaceholders) {
+    recipes.getRange(2, 1, recipeRows.length, recipeHeader.length)
+      .setValues(recipeRows.map(function (r) { return recipeHeader.map(function (c) { return cell_(c, r[c]); }); }));
+  }
+  return result;
+}
+
+/** Every Failed row, for scripts/retry-failed.mjs. */
+function readFailed_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.failed.name);
+  if (!sheet || sheet.getLastRow() < 2) return { ok: true, rows: [] };
+  const header = header_(sheet, TABS.failed.columns);
+  return {
+    ok: true,
+    rows: sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues().map(function (v) {
+      const r = rowObject_(header, v);
+      return {
+        saved_at: r.saved_at instanceof Date ? r.saved_at.toISOString() : String(r.saved_at || ''),
+        source_url: String(r.source_url || ''), error: String(r.error || ''), creator: String(r.creator || ''),
+      };
+    }),
+  };
 }
 
 function append_(type, rows) {
@@ -515,8 +742,9 @@ function rowsIn_(sheet, sourceUrl) {
   if (urlCol === -1) return [];
   const data = sheet.getRange(2, 1, last - 1, header.length).getValues();
   const out = [];
+  // A place saved from several posts lists one link per line.
   data.forEach(function (r, i) {
-    if (r[urlCol] === sourceUrl) out.push({ rowNumber: i + 2, title: titleCol === -1 ? '' : r[titleCol] });
+    if (lines_(r[urlCol]).indexOf(sourceUrl) !== -1) out.push({ rowNumber: i + 2, title: titleCol === -1 ? '' : r[titleCol] });
   });
   return out;
 }

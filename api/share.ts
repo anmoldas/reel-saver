@@ -67,7 +67,7 @@ async function handle(request: Request): Promise<Response> {
   try {
     const existing = await findExisting(env, url);
     if (existing.exists) return json({ ok: true, duplicate: true, message: `Already saved: ${existing.title ?? url}` });
-    lists = listsFrom(existing.topics, existing.place_types, existing.guides);
+    lists = listsFrom(existing.topics, existing.place_types, existing.guides, existing.cities);
   } catch (err) {
     console.log(`[save-faves] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
