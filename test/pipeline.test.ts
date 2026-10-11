@@ -77,12 +77,12 @@ describe('runPipeline', () => {
     expect(rows[0]).toMatchObject({ type: 'place', title: 'Veracruz', city: 'Austin', place_id: 'PID', lat: 40, lng: -73, creator: '@chef' });
   });
 
-  it('skips a just-for-fun post without watching the video or writing a row', async () => {
+  it('skips a just-for-fun post without watching the video or writing a row, clearing an earlier failure', async () => {
     const svc = fakeServices({ caption: 'when your cat hears the treat bag 😂', captionParse: { needs_video: false, just_for_fun: true, items: [] } });
     const result = await runPipeline(env, params);
     expect(result).toEqual({ ok: true, skipped: true, message: 'Skipped: just for fun, nothing to save' });
     expect(svc.geminiCalls()).toBe(1);
-    expect(svc.sheetWrites).toEqual([]);
+    expect(svc.sheetWrites).toEqual([{ secret: 's', action: 'write', source_url: params.url, rows: [] }]);
   });
 
   it('watches the video before deciding a post is just for fun', async () => {
@@ -94,7 +94,7 @@ describe('runPipeline', () => {
     const result = await runPipeline(env, params);
     expect(result.skipped).toBe(true);
     expect(svc.geminiCalls()).toBe(2);
-    expect(svc.sheetWrites).toEqual([]);
+    expect(svc.sheetWrites.map((w) => w.rows)).toEqual([[]]);
   });
 
   it('keeps items even if the model also says just for fun', async () => {

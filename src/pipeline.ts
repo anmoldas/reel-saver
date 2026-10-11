@@ -105,6 +105,10 @@ async function runSteps(
   }
   if (result?.just_for_fun) {
     log(url, 'just for fun, nothing saved');
+    // Writing no rows still clears a Failed row left by an earlier try of this post.
+    if (!state.abandoned) {
+      await writeRows(env, url, []).catch((err) => log(url, `could not clear an earlier failure: ${errorMessage(err)}`));
+    }
     return { ok: true, skipped: true, message: 'Skipped: just for fun, nothing to save' };
   }
   if (!result?.items.length) throw new Error('Found nothing to save in this post');
