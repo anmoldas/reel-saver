@@ -6,6 +6,9 @@
     },
     "api/cleanup-mentions.ts": {
       "maxDuration": 300
+    },
+    "api/guides.ts": {
+      "maxDuration": 300
     }
   }
 }

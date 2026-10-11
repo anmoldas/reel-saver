@@ -1,6 +1,6 @@
 # reel saver
 
-tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways, sorted into [topics you pick](#topics). every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
+tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways, sorted into [topics you pick](#topics). ideas on the same subject are combined into [guides](#guides), so ten videos about one trip become one list. every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
 
 <!-- TODO screenshot: the sheet (Places / Ideas / Mentions tabs) next to the phone notification "Saved place: …" -->
 
@@ -70,7 +70,8 @@ one tab per kind of save, newest at the top. every save re-sorts its tab by `sav
 |---|---|---|
 | **Places** | restaurants, cafes, bars, shops, sights, activities, hotels | `saved_at, done, title, category, specialty, city, country, address, what_to_order, summary, maps_url, lat, lng, place_id, creator, source_url, thumbnail_url, notes` |
 | **Recipes** | anything you'd cook | `saved_at, done, title, summary, time, servings, ingredients, steps, creator, source_url, thumbnail_url, notes` |
-| **Ideas** | everything else: tips, advice, how-tos, products, outfits, tools | `saved_at, done, topic, title, summary, takeaways, mentioned, suggested_topic, creator, source_url, thumbnail_url, notes` |
+| **Ideas** | everything else: tips, advice, how-tos, products, outfits, tools | `saved_at, done, topic, guide, title, summary, takeaways, mentioned, suggested_topic, creator, source_url, thumbnail_url, notes` |
+| **Guides** | one row per subject with two or more ideas, their takeaways combined | `saved_at, done, guide, topic, videos, summary, takeaways, from, creator, source_url, notes` |
 | **Mentions** | one row per product, app, brand, store, book, show, course or person an idea recommends | `saved_at, status, name, kind, brand, why, price, topic, times_mentioned, shop_link, from, creator, source_url, notes` |
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
@@ -93,6 +94,17 @@ everything an idea recommends gets one row in **Mentions**: a shopping and to-tr
 - places don't go here (they're in Places), and neither does anything the creator criticised, a giveaway prize or a credited source.
 - **older sheets:** ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once to turn those into rows (kind, brand, why and price stay empty for them).
 - **older sheets:** to tidy rows from before grouping and the stricter rules, run `node scripts/clean-mentions.mjs --url https://YOUR-APP.vercel.app`. it asks Gemini to review every row and shows what it would remove, re-kind and merge, without changing anything. add `--apply` to do exactly that; the tab is copied to `Mentions (backup)` first. to only merge duplicates, run `mergeDuplicateMentions`. don't run either while an import is going.
+
+### guides
+
+every idea gets a `guide`: the broad subject it belongs to. trips go by country (Tokyo, Kyoto and konbini tips are all **Japan**) or by city for a city break (**Amsterdam**); everything else by skill or area of life (**Video editing**, **Workouts**, **Budgeting**, **Hair & beauty**). general travel advice like miles and lounges is **Travel hacks**.
+
+- Gemini picks a guide that already exists when one fits, so new videos join the right one. it can also start a new one.
+- once a guide has two videos it gets a row in **Guides**: a one-line summary and every video's takeaways combined, with repeats merged. big guides are split into short sections (Japan → shopping, drugstore & konbini, Kyoto…).
+- each new video rewrites its guide from all its videos. `from`, `creator` and `source_url` list them, newest first. `done` and `notes` are yours and are kept.
+- **to move an idea**, change its `guide` cell, then rebuild (below).
+- **grouping older ideas** (from before guides existed): `node scripts/build-guides.mjs --url https://YOUR-APP.vercel.app` asks Gemini to pick a guide for every idea that has none and prints the groups, without changing anything. it saves them in `.guides-plan.json`: change any `guide` there to rename or move one. add `--apply` to write them and build the Guides tab.
+- **rebuilding**: `--rebuild` instead rewrites every guide from the Ideas tab: after an import (imports skip guides to save Gemini calls), or after you've changed `guide` cells by hand.
 
 ### topics
 
@@ -142,7 +154,7 @@ node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https
 
 on a mac, put `caffeinate -i` in front of the command to keep it from sleeping while it runs. on windows, set Settings → System → Power → Sleep to Never while it runs.
 
-it sends newest first, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops by itself at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. running it again skips anything already done (progress is in `.import-progress.json`), so next month's batch is the same command. the SECRET is read from `.env.local`.
+it sends newest first, and each row keeps the date you saved it. instagram collections go in the `notes` column ("IG collection: Food"). it stops by itself at the first error that isn't about a single post (out of Apify credit, Gemini's daily limit) or after 3 failures in a row; deleted or private posts are just skipped. running it again skips anything already done (progress is in `.import-progress.json`), so next month's batch is the same command. the SECRET is read from `.env.local`. when it's done, run `node scripts/build-guides.mjs --url https://YOUR-APP.vercel.app --rebuild` to fold the imported ideas into the Guides tab.
 
 ## how it works
 

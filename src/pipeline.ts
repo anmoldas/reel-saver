@@ -1,6 +1,7 @@
 import { getItems, normalizeItem, startRun, waitForRun } from './apify.js';
 import { errorMessage } from './errors.js';
 import { deleteVideo, downloadImages, needsVideo, parseCaption, parseMedia, uploadVideo, type Media } from './gemini.js';
+import { refreshGuide } from './guides.js';
 import { findPlace } from './places.js';
 import { failedRow, itemRow, mentionRows, summarize } from './rows.js';
 import { writeRows } from './sheet.js';
@@ -8,6 +9,8 @@ import type { Env, ParseResult, PipelineParams, PipelineResult, PlaceMatch, Post
 
 // Vercel Hobby stops functions at 300s. Give up early enough to still write the failure row.
 const DEADLINE_MS = 240_000;
+// Updating a guide is skipped when less time than this is left; the next save to that guide catches up.
+const GUIDE_TIME_MS = 60_000;
 
 const log = (url: string, msg: string) => console.log(`[reel-saver] ${url} ${msg}`);
 
@@ -16,7 +19,7 @@ const log = (url: string, msg: string) => console.log(`[reel-saver] ${url} ${msg
  * so nothing shared is silently lost.
  */
 export async function runPipeline(env: Env, params: PipelineParams, deadlineMs = DEADLINE_MS): Promise<PipelineResult> {
-  const state = { abandoned: false };
+  const state = { abandoned: false, deadlineAt: Date.now() + deadlineMs };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`Timed out after ${Math.round(deadlineMs / 1000)}s`)), deadlineMs);
@@ -73,8 +76,8 @@ async function readMedia(env: Env, lists: PipelineParams['lists'], post: Post, u
 
 async function runSteps(
   env: Env,
-  { url, platform, savedAt, lists, note }: PipelineParams,
-  state: { abandoned: boolean },
+  { url, platform, savedAt, lists, note, skipGuides }: PipelineParams,
+  state: { abandoned: boolean; deadlineAt: number },
   onPost: (p: Post) => void,
 ): Promise<PipelineResult> {
   // 1. Fetch
@@ -128,6 +131,21 @@ async function runSteps(
   ]);
   const written = await writeRows(env, url, rows);
   if (written.duplicate) return { ok: true, message: 'Already saved' };
+
+  // 5. Fold new ideas into their guides. The save already worked, so a failure here is only logged.
+  const guides = [...new Set(result.items.map((item) => item.idea?.guide ?? '').filter(Boolean))];
+  for (const guide of skipGuides ? [] : guides) {
+    if (state.abandoned || Date.now() > state.deadlineAt - GUIDE_TIME_MS) {
+      log(url, `no time left to update the ${guide} guide`);
+      break;
+    }
+    try {
+      const videos = await refreshGuide(env, guide);
+      if (videos > 1) log(url, `updated the ${guide} guide (${videos} videos)`);
+    } catch (err) {
+      log(url, `could not update the ${guide} guide: ${errorMessage(err)}`);
+    }
+  }
 
   const message = summarize(result.items);
   log(url, message);

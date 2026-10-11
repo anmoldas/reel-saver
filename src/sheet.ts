@@ -1,5 +1,6 @@
 import { errorMessage, withRetry } from './errors.js';
 import type { CleanupPlan, MentionRow } from './cleanup.js';
+import type { GuideVideo, IdeaRow } from './guides.js';
 import type { Env, Row } from './types.js';
 
 // Apps Script now and then answers with an error page instead of JSON; a retry usually works.
@@ -26,11 +27,11 @@ async function callOnce(env: Env, payload: Record<string, unknown>): Promise<any
   return data;
 }
 
-/** Is this URL already saved (ignoring failed rows)? Also returns the Topics and Place types tabs. */
+/** Is this URL already saved (ignoring failed rows)? Also returns the Topics and Place types tabs and the guide names. */
 export async function findExisting(
   env: Env,
   sourceUrl: string,
-): Promise<{ exists: boolean; title?: string; type?: string; topics?: string[]; place_types?: string[] }> {
+): Promise<{ exists: boolean; title?: string; type?: string; topics?: string[]; place_types?: string[]; guides?: string[] }> {
   return call(env, { action: 'check', source_url: sourceUrl });
 }
 
@@ -60,4 +61,24 @@ export async function cleanMentions(env: Env, plan: CleanupPlan, dryRun: boolean
     updates: plan.updates.map((u) => ({ row: u.row, kind: u.kind, shop_link: u.shop_link })),
     dry_run: dryRun,
   });
+}
+
+/** Every Ideas row, for grouping the ones without a guide. */
+export async function readIdeas(env: Env): Promise<IdeaRow[]> {
+  return (await call(env, { action: 'ideas' })).rows ?? [];
+}
+
+/** Sets the guide column on the Ideas rows with these links. */
+export async function assignGuides(env: Env, assignments: { source_url: string; guide: string }[]): Promise<{ assigned: number }> {
+  return call(env, { action: 'assignGuides', assignments });
+}
+
+/** The ideas in one guide, newest first. */
+export async function guideVideos(env: Env, guide: string): Promise<GuideVideo[]> {
+  return (await call(env, { action: 'guideVideos', guide })).videos ?? [];
+}
+
+/** Writes a guide's row (or removes it when the guide has fewer than two videos). */
+export async function writeGuide(env: Env, guide: string, summary: string, takeaways: string): Promise<{ written: number; videos: number }> {
+  return call(env, { action: 'writeGuide', guide, summary, takeaways });
 }

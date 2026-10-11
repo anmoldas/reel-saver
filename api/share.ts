@@ -24,7 +24,7 @@ export function GET(): Response {
   return json({ ok: true, service: 'reel-saver' });
 }
 
-/** POST { url, secret, saved_at?, wait?, note? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
+/** POST { url, secret, saved_at?, wait?, note?, guides? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
 export async function POST(request: Request): Promise<Response> {
   try {
     return await handle(request);
@@ -67,7 +67,7 @@ async function handle(request: Request): Promise<Response> {
   try {
     const existing = await findExisting(env, url);
     if (existing.exists) return json({ ok: true, duplicate: true, message: `Already saved: ${existing.title ?? url}` });
-    lists = listsFrom(existing.topics, existing.place_types);
+    lists = listsFrom(existing.topics, existing.place_types, existing.guides);
   } catch (err) {
     console.log(`[reel-saver] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
@@ -80,7 +80,9 @@ async function handle(request: Request): Promise<Response> {
 
   // Imports can pass a short note for the notes column (e.g. "IG collection: Food").
   const note = typeof body.note === 'string' ? body.note.trim().slice(0, 200) : '';
-  const work = runPipeline(env, { url, platform, savedAt, lists, ...(note ? { note } : {}) });
+  // Imports send guides: false and rebuild the Guides tab once at the end instead of after every save.
+  const skipGuides = body.guides === false || body.guides === 'false';
+  const work = runPipeline(env, { url, platform, savedAt, lists, ...(note ? { note } : {}), ...(skipGuides ? { skipGuides } : {}) });
   // Imports ask to wait for the real outcome, so they can stop on errors.
   if (body.wait === true || body.wait === 'true') return json(await work);
 

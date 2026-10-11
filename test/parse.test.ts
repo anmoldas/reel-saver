@@ -104,6 +104,22 @@ describe('normalizeParse and needsVideo', () => {
   });
 });
 
+describe('guides', () => {
+  it('uses an existing guide\'s spelling and keeps new names', () => {
+    const r = normalizeParse(
+      {
+        items: [
+          { type: 'idea', title: 'a', idea: { topic: 'AI', guide: ' japan ', takeaways: ['x'] } },
+          { type: 'idea', title: 'b', idea: { topic: 'AI', guide: 'Workouts', takeaways: ['y'] } },
+          { type: 'idea', title: 'c', idea: { topic: 'AI', takeaways: ['z'] } },
+        ],
+      },
+      lists(['AI'], undefined, ['Japan', 'japan', '', 'Amsterdam']),
+    );
+    expect(r.items.map((i) => i.idea?.guide)).toEqual(['Japan', 'Workouts', '']);
+  });
+});
+
 describe('topicList', () => {
   it('uses the sheet list, drops blanks and duplicates, and always ends in Other', () => {
     expect(topicList([' AI ', '', 'AI', 'other', 'Career'])).toEqual(['AI', 'Career', 'Other']);

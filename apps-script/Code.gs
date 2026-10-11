@@ -7,6 +7,7 @@
  *
  * Rows land in one tab per type: Places, Recipes, Ideas, and Failed for errors.
  * Idea topics come from the Topics tab: add a row there to add a topic.
+ * Ideas on the same subject share a guide name; the Guides tab has one combined row per guide.
  */
 
 const TABS = {
@@ -22,8 +23,12 @@ const TABS = {
   },
   idea: {
     name: 'Ideas',
-    columns: ['saved_at', 'done', 'topic', 'title', 'summary', 'takeaways', 'mentioned', 'suggested_topic',
+    columns: ['saved_at', 'done', 'topic', 'guide', 'title', 'summary', 'takeaways', 'mentioned', 'suggested_topic',
       'creator', 'source_url', 'thumbnail_url', 'notes'],
+  },
+  guide: {
+    name: 'Guides',
+    columns: ['saved_at', 'done', 'guide', 'topic', 'videos', 'summary', 'takeaways', 'from', 'creator', 'source_url', 'notes'],
   },
   mention: {
     name: 'Mentions',
@@ -49,7 +54,7 @@ const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'h
 const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
 // Bump when this file changes, so a check of the web app shows which code is deployed.
-const SCRIPT_VERSION = 3;
+const SCRIPT_VERSION = 4;
 
 function doGet() {
   return json_({ ok: true, service: 'reel-saver sheet', version: SCRIPT_VERSION });
@@ -72,6 +77,10 @@ function doPost(e) {
     if (body.action === 'write') return json_(write_(body.source_url, body.rows || []));
     if (body.action === 'mentions') return json_(readMentions_());
     if (body.action === 'cleanMentions') return json_(cleanMentions_(body));
+    if (body.action === 'ideas') return json_(readIdeas_());
+    if (body.action === 'assignGuides') return json_(assignGuides_(body.assignments || []));
+    if (body.action === 'guideVideos') return json_({ ok: true, videos: guideVideos_(body.guide) });
+    if (body.action === 'writeGuide') return json_(writeGuide_(body));
     return json_({ ok: false, error: 'Unknown action: ' + body.action });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -80,10 +89,12 @@ function doPost(e) {
   }
 }
 
-/** Is this URL already saved in Places, Recipes or Ideas? Also returns the topic list. */
+/** Is this URL already saved in Places, Recipes or Ideas? Also returns the topic, place type and guide lists. */
 function check_(sourceUrl) {
   const found = savedRows_(sourceUrl);
-  const result = { ok: true, exists: found.length > 0, topics: readTopics_(), place_types: readPlaceTypes_() };
+  const result = {
+    ok: true, exists: found.length > 0, topics: readTopics_(), place_types: readPlaceTypes_(), guides: guideNames_(),
+  };
   if (found.length) {
     result.title = found[0].title;
     result.type = found[0].type;
@@ -351,6 +362,117 @@ function mergeDuplicateMentions() {
   const read = readMentions_();
   const result = cleanMentions_({ count: read.count });
   Logger.log(JSON.stringify(result));
+}
+
+// ---- Guides: ideas on the same subject, combined into one row ----
+// Each idea's guide name is set when it is saved (or by scripts/build-guides.mjs for older ones).
+// The combined takeaways are written by the app; the lists of videos come from the Ideas tab.
+
+/** Every Ideas row as objects, with its header. */
+function ideaRows_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.idea.name);
+  if (!sheet || sheet.getLastRow() < 2) return { sheet: sheet, header: [], rows: [] };
+  const header = header_(sheet, TABS.idea.columns);
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  return { sheet: sheet, header: header, data: data, rows: data.map(function (v) { return rowObject_(header, v); }) };
+}
+
+/** The guide names in use, most videos first, each spelled the way it was first written. */
+function guideNames_() {
+  const counts = {};
+  const names = [];
+  ideaRows_().rows.forEach(function (r) {
+    const name = String(r.guide || '').trim();
+    const key = norm_(name);
+    if (!key) return;
+    if (!counts[key]) names.push({ key: key, name: name });
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return names.sort(function (a, b) { return counts[b.key] - counts[a.key]; }).map(function (n) { return n.name; });
+}
+
+/** Every idea, for grouping the ones without a guide. */
+function readIdeas_() {
+  return {
+    ok: true,
+    rows: ideaRows_().rows.map(function (r) {
+      return { source_url: r.source_url, title: r.title, summary: r.summary, topic: r.topic, guide: r.guide };
+    }),
+  };
+}
+
+/** Sets the guide column: [{ source_url, guide }]. Returns how many rows changed. */
+function assignGuides_(assignments) {
+  const byUrl = {};
+  assignments.forEach(function (a) { if (a && a.source_url) byUrl[a.source_url] = String(a.guide || '').trim(); });
+  const ideas = ideaRows_();
+  if (!ideas.rows.length) return { ok: true, assigned: 0 };
+  const urlCol = ideas.header.indexOf('source_url');
+  const guideCol = ideas.header.indexOf('guide');
+  let assigned = 0;
+  ideas.data.forEach(function (r) {
+    const guide = byUrl[r[urlCol]];
+    if (guide === undefined || guide === r[guideCol]) return;
+    r[guideCol] = guide;
+    assigned++;
+  });
+  if (assigned) {
+    ideas.sheet.getRange(2, 1, ideas.data.length, ideas.header.length)
+      .setValues(ideas.data.map(function (r) { return r.map(function (v, c) { return cell_(ideas.header[c], v); }); }));
+  }
+  return { ok: true, assigned: assigned };
+}
+
+/** The ideas in one guide, newest first. */
+function guideVideos_(guide) {
+  const key = norm_(guide);
+  if (!key) return [];
+  return ideaRows_().rows
+    .filter(function (r) { return norm_(r.guide) === key; })
+    .map(function (r) {
+      return {
+        saved_at: r.saved_at instanceof Date ? r.saved_at.toISOString() : String(r.saved_at || ''),
+        title: r.title, topic: r.topic, takeaways: r.takeaways, creator: r.creator, source_url: r.source_url,
+      };
+    })
+    .sort(function (a, b) { return new Date(b.saved_at) - new Date(a.saved_at); });
+}
+
+/**
+ * Writes one guide's row: { guide, summary, takeaways }. The videos, topic and date come from the Ideas tab;
+ * your done and notes are kept. A guide with fewer than two videos has no row.
+ */
+function writeGuide_(body) {
+  const videos = guideVideos_(body.guide);
+  const sheet = sheetFor_('guide');
+  const header = header_(sheet, TABS.guide.columns);
+  const last = sheet.getLastRow();
+  const data = last < 2 ? [] : sheet.getRange(2, 1, last - 1, header.length).getValues();
+  const at = data.map(function (r) { return norm_(r[header.indexOf('guide')]); }).indexOf(norm_(body.guide));
+  if (videos.length < 2) {
+    if (at !== -1) sheet.deleteRow(at + 2);
+    return { ok: true, written: 0, videos: videos.length };
+  }
+  const topics = {};
+  videos.forEach(function (v) { if (v.topic) topics[v.topic] = (topics[v.topic] || 0) + 1; });
+  const old = at === -1 ? {} : rowObject_(header, data[at]);
+  const row = {
+    saved_at: videos[0].saved_at,
+    done: old.done === true,
+    guide: old.guide || body.guide,
+    topic: Object.keys(topics).sort(function (a, b) { return topics[b] - topics[a]; })[0] || '',
+    videos: videos.length,
+    summary: body.summary || '',
+    takeaways: body.takeaways || '',
+    from: videos.map(function (v) { return v.title; }).join('\n'),
+    creator: videos.map(function (v) { return v.creator || ''; }).join('\n'),
+    source_url: videos.map(function (v) { return v.source_url; }).join('\n'),
+    notes: old.notes || '',
+  };
+  if (at === -1) return { ok: true, written: append_('guide', [row]), videos: videos.length };
+  sheet.getRange(at + 2, 1, 1, header.length).setValues([header.map(function (c) { return cell_(c, row[c]); })]);
+  sortNewestFirst_(sheet);
+  return { ok: true, written: 1, videos: videos.length };
 }
 
 function rowObject_(header, values) {

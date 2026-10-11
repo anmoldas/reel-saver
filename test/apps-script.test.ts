@@ -76,7 +76,7 @@ function load() {
     PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: {}, UrlFetchApp: {},
   };
   const src = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_ };`)(...Object.values(globals));
+  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_ };`)(...Object.values(globals));
 }
 
 let gs: {
@@ -86,6 +86,9 @@ let gs: {
   cleanMentions_: (body: object) => any;
   append_: (type: string, rows: object[]) => number;
   applyNewTopics_: () => { ideas: number; mentions: number };
+  guideNames_: () => string[];
+  assignGuides_: (a: object[]) => { assigned: number };
+  writeGuide_: (body: object) => { written: number; videos: number };
 };
 const mentions = () => sheets.Mentions.rows;
 const field = (r: Row, c: string) => r[(mentions()[0] as string[]).indexOf(c)];
@@ -218,5 +221,53 @@ describe('applyNewTopics', () => {
       .toEqual([['Kettlebells', 'Fitness', ''], ['Gardening', 'Other', 'Gardening']]);
     expect(field(byName('Kettlebell'), 'topic')).toBe('Fitness');
     expect(field(byName('Trowel'), 'topic')).toBe('Other');
+  });
+});
+
+describe('guides', () => {
+  const col = (tab: string, r: Row, c: string) => r[(sheets[tab].rows[0] as string[]).indexOf(c)];
+  const guideRows = () => sheets.Guides.rows.slice(1).map((r) => ({
+    guide: col('Guides', r, 'guide'), videos: col('Guides', r, 'videos'), topic: col('Guides', r, 'topic'),
+    from: col('Guides', r, 'from'), takeaways: col('Guides', r, 'takeaways'), done: col('Guides', r, 'done'), notes: col('Guides', r, 'notes'),
+  }));
+
+  beforeEach(() => {
+    gs.append_('idea', [
+      { title: 'Kyoto tips', topic: 'Travel tips', guide: 'Japan', source_url: 'u1', saved_at: '2026-01-03T00:00:00Z' },
+      { title: 'Japan shopping', topic: 'Travel tips', guide: 'japan', source_url: 'u2', saved_at: '2026-01-02T00:00:00Z' },
+      { title: 'Drugstore', topic: 'Health & Wellness', source_url: 'u3', saved_at: '2026-01-01T00:00:00Z' },
+      { title: 'CapCut', topic: 'Video editing', guide: 'Video editing', source_url: 'u4', saved_at: '2025-12-01T00:00:00Z' },
+    ]);
+  });
+
+  it('lists guide names, most videos first, in their first spelling', () => {
+    expect(gs.guideNames_()).toEqual(['Japan', 'Video editing']);
+  });
+
+  it('sets the guide on ideas by link', () => {
+    expect(gs.assignGuides_([{ source_url: 'u3', guide: 'Japan' }, { source_url: 'u1', guide: 'Japan' }, { source_url: 'nope', guide: 'X' }]))
+      .toEqual({ ok: true, assigned: 1 });
+    expect(sheets.Ideas.rows.slice(1).map((r) => col('Ideas', r, 'guide'))).toEqual(['Japan', 'japan', 'Japan', 'Video editing']);
+  });
+
+  it('writes one row per guide from its videos, keeping your done and notes on rewrite', () => {
+    gs.assignGuides_([{ source_url: 'u3', guide: 'Japan' }]);
+    expect(gs.writeGuide_({ guide: 'Japan', summary: 's', takeaways: '• one' })).toEqual({ ok: true, written: 1, videos: 3 });
+    expect(guideRows()).toEqual([{ guide: 'Japan', videos: 3, topic: 'Travel tips', from: 'Kyoto tips\nJapan shopping\nDrugstore', takeaways: '• one', done: false, notes: '' }]);
+
+    const r = sheets.Guides.rows[1];
+    r[(sheets.Guides.rows[0] as string[]).indexOf('done')] = true;
+    r[(sheets.Guides.rows[0] as string[]).indexOf('notes')] = 'mine';
+    gs.writeGuide_({ guide: 'JAPAN', summary: 's2', takeaways: '• two' });
+    expect(guideRows()).toMatchObject([{ guide: 'Japan', takeaways: '• two', done: true, notes: 'mine' }]);
+  });
+
+  it('has no row for a guide with one video, and drops one that falls to one', () => {
+    expect(gs.writeGuide_({ guide: 'Video editing', takeaways: '• x' })).toEqual({ ok: true, written: 0, videos: 1 });
+    gs.writeGuide_({ guide: 'Japan', takeaways: '• x' });
+    expect(guideRows()).toHaveLength(1);
+    gs.assignGuides_([{ source_url: 'u2', guide: 'Shopping' }]);
+    gs.writeGuide_({ guide: 'Japan', takeaways: '' });
+    expect(guideRows()).toHaveLength(0);
   });
 });

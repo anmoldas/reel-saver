@@ -15,7 +15,7 @@ function gemini(result: unknown) {
 }
 
 /** Routes fetch calls to fake services and records what the sheet received. */
-function fakeServices(opts: { caption: string; captionParse: unknown; videoParse?: unknown; apifyItem?: unknown }) {
+function fakeServices(opts: { caption: string; captionParse: unknown; videoParse?: unknown; guideParse?: unknown; guideVideos?: unknown[]; apifyItem?: unknown }) {
   const sheetWrites: any[] = [];
   const calls: string[] = [];
   const geminiBodies: any[] = [];
@@ -36,12 +36,16 @@ function fakeServices(opts: { caption: string; captionParse: unknown; videoParse
     if (url === 'https://upload.test/1') return ok({ file: { name: 'files/1', uri: 'https://g/files/1', state: 'ACTIVE', mimeType: 'video/mp4' } });
     if (url.includes('/v1beta/files/1')) return ok({});
     if (url.includes(':generateContent')) geminiBodies.push(JSON.parse(String(init?.body)));
-    if (url.includes(':generateContent')) return gemini(geminiCalls++ === 0 ? opts.captionParse : opts.videoParse);
+    if (url.includes(':generateContent')) {
+      const n = geminiCalls++;
+      return gemini(n === 0 ? opts.captionParse : n === 1 ? opts.videoParse : opts.guideParse);
+    }
     if (url.includes('places.googleapis.com'))
       return ok({ places: [{ id: 'PID', formattedAddress: '1 Main St', location: { latitude: 40, longitude: -73 } }] });
     if (url === env.SHEET_URL) {
       const body = JSON.parse(String(init?.body));
       sheetWrites.push(body);
+      if (body.action === 'guideVideos') return ok({ ok: true, videos: opts.guideVideos ?? [] });
       return ok({ ok: true, written: body.rows?.length ?? 0 });
     }
     throw new Error(`unexpected fetch ${url}`);
@@ -239,6 +243,51 @@ describe('runPipeline', () => {
     const result = await runPipeline(env, params, 50);
     expect(result.message).toMatch(/Timed out/);
     expect(svc.sheetWrites.at(-1).rows[0].type).toBe('failed');
+  });
+});
+
+describe('guides', () => {
+  const idea = (guide: string) => ({
+    needs_video: false,
+    items: [{ type: 'idea', title: 'Kyoto tips', summary: 's', confidence: 0.9, idea: { topic: 'Travel tips', guide, takeaways: ['Go early'], mentioned: [] } }],
+  });
+  const videos = [
+    { title: 'Kyoto tips', takeaways: '• Go early', creator: '@a', source_url: 'u1' },
+    { title: 'Japan tips', takeaways: '• Get a Suica', creator: '@b', source_url: 'u2' },
+  ];
+
+  it('rewrites the guide from all its videos after saving an idea', async () => {
+    const svc = fakeServices({
+      caption: 'kyoto',
+      captionParse: idea('japan'),
+      videoParse: idea('japan'),
+      guideParse: { summary: 'Japan trip notes', sections: [{ heading: '', points: ['Go early', 'Get a Suica'] }] },
+      guideVideos: videos,
+    });
+    const run = { ...params, lists: lists(undefined, undefined, ['Japan', 'Amsterdam']) };
+    const result = await runPipeline(env, run);
+    expect(result.message).toBe('Saved idea: Kyoto tips');
+    expect(svc.geminiBodies[0].systemInstruction.parts[0].text).toContain('"Japan", "Amsterdam"');
+    expect(svc.sheetWrites.map((b) => b.action)).toEqual(['write', 'guideVideos', 'writeGuide']);
+    expect(svc.sheetWrites[0].rows[0].guide).toBe('Japan'); // the existing spelling
+    expect(svc.sheetWrites[2]).toMatchObject({ guide: 'Japan', summary: 'Japan trip notes', takeaways: '• Go early\n• Get a Suica' });
+  });
+
+  it('does not combine a guide that has only this video', async () => {
+    const svc = fakeServices({ caption: 'k', captionParse: idea('Kyoto'), videoParse: idea('Kyoto'), guideVideos: videos.slice(0, 1) });
+    await runPipeline(env, params);
+    expect(svc.geminiCalls()).toBe(2);
+    expect(svc.sheetWrites.at(-1)).toMatchObject({ action: 'writeGuide', guide: 'Kyoto', takeaways: '' });
+  });
+
+  it('leaves guides alone for imports, and a guide failure does not fail the save', async () => {
+    const opts = { caption: 'k', captionParse: idea('Japan'), videoParse: idea('Japan'), guideVideos: videos, guideParse: 'not json' };
+    const svc = fakeServices(opts);
+    expect((await runPipeline(env, { ...params, skipGuides: true })).message).toBe('Saved idea: Kyoto tips');
+    expect(svc.sheetWrites.map((b) => b.action)).toEqual(['write']);
+    const broken = fakeServices(opts);
+    expect(await runPipeline(env, params)).toEqual({ ok: true, message: 'Saved idea: Kyoto tips' });
+    expect(broken.sheetWrites.map((b) => b.action)).toEqual(['write', 'guideVideos']);
   });
 });
 
