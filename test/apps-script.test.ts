@@ -65,7 +65,7 @@ function makeSheet(name: string) {
   return sheet;
 }
 
-function load() {
+function load(driveApp: object = {}) {
   const ss = {
     getSheetByName: (n: string) => sheets[n] ?? null,
     insertSheet: (n: string) => makeSheet(n),
@@ -73,10 +73,10 @@ function load() {
   };
   const globals = {
     SpreadsheetApp: { getActiveSpreadsheet: () => ss, newDataValidation: () => ({ requireValueInList: () => ({ build() {} }) }) },
-    PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: {}, UrlFetchApp: {},
+    PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: driveApp, UrlFetchApp: {},
   };
   const src = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, tidy_, readFailed_, cityNames_, readPlaceNotes_, setPlaceNotes_ };`)(...Object.values(globals));
+  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, tidy_, readFailed_, cityNames_, readPlaceNotes_, setPlaceNotes_, thumbnailFolder_ };`)(...Object.values(globals));
 }
 
 let gs: {
@@ -361,5 +361,38 @@ describe('places', () => {
   it('reads the Failed tab', () => {
     gs.append_('failed', [{ saved_at: '2026-03-21T00:00:00Z', source_url: 'u9', error: 'Timed out after 240s' }]);
     expect(gs.readFailed_().rows).toEqual([{ saved_at: '2026-03-21T00:00:00.000Z', source_url: 'u9', error: 'Timed out after 240s', creator: '' }]);
+  });
+});
+
+describe('thumbnails folder', () => {
+  function drive(names: string[]) {
+    const folders = names.map((name) => ({ name, setName(n: string) { this.name = n; return this; } }));
+    const created: string[] = [];
+    const api = {
+      folders,
+      created,
+      getFoldersByName: (n: string) => {
+        const hit = folders.filter((f) => f.name === n);
+        return { hasNext: () => hit.length > 0, next: () => hit.shift() };
+      },
+      createFolder: (n: string) => { created.push(n); return { name: n }; },
+    };
+    return api;
+  }
+
+  it('renames the old Reel Saver folder instead of making a new one', () => {
+    const d = drive(['Reel Saver thumbnails']);
+    expect(load(d).thumbnailFolder_().name).toBe('Save Faves thumbnails');
+    expect(d.folders[0].name).toBe('Save Faves thumbnails');
+    expect(d.created).toEqual([]);
+  });
+
+  it('uses the Save Faves folder when there is one, and makes it when there is neither', () => {
+    const both = drive(['Save Faves thumbnails', 'Reel Saver thumbnails']);
+    expect(load(both).thumbnailFolder_()).toBe(both.folders[0]);
+    expect(both.folders[1].name).toBe('Reel Saver thumbnails');
+    const none = drive([]);
+    load(none).thumbnailFolder_();
+    expect(none.created).toEqual(['Save Faves thumbnails']);
   });
 });
