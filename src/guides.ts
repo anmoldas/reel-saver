@@ -1,3 +1,8 @@
+// Guides: every idea gets a broad subject ("Japan", "Video editing"), and ideas on the same subject are
+// combined into one row in the Guides tab, so ten videos about one trip read as a single list.
+// Gemini does the combining. The second half of this file is for grouping ideas saved before guides
+// existed, used by scripts/build-guides.mjs.
+
 import { askJson } from './gemini.js';
 import { guideVideos, writeGuide } from './sheet.js';
 import { GUIDE_NAMING, guideList, matchGuide } from './topics.js';
@@ -22,6 +27,7 @@ export interface GuideVideo {
   source_url: string;
 }
 
+/** A guide picked for one idea. */
 export interface Assignment {
   title: string;
   guide: string;
@@ -30,7 +36,8 @@ export interface Assignment {
 
 // ---- combining a guide's takeaways ----
 
-export const GUIDE_RULES = `You combine the takeaways from several saved social media videos on one subject into a single guide someone can read instead of rewatching them.
+/** The instructions Gemini follows when combining a guide. */
+export const GUIDE_RULES =`You combine the takeaways from several saved social media videos on one subject into a single guide someone can read instead of rewatching them.
 
 - Keep every useful point. When several videos say the same thing, write it once, keeping the most specific version (names, prices, numbers, places).
 - Each point is one short standalone sentence. Never invent anything that is not in the takeaways.
@@ -92,7 +99,8 @@ export async function refreshGuide(env: Env, guide: string): Promise<number> {
 
 // ---- grouping older ideas (scripts/build-guides.mjs) ----
 
-export const GROUP_RULES = `You sort saved "ideas" (tips, advice and recommendations from social media videos) into guides, so ideas on the same subject can be read together.
+/** The instructions Gemini follows when picking guides for older ideas. */
+export const GROUP_RULES =`You sort saved "ideas" (tips, advice and recommendations from social media videos) into guides, so ideas on the same subject can be read together.
 
 For each idea, give its "guide": ${GUIDE_NAMING}
 
@@ -111,6 +119,7 @@ function groupSchema() {
   };
 }
 
+// Ideas sent to Gemini per request.
 const BATCH = 150;
 
 /** Gives every idea without a guide one, reusing the guides already in use. Text only, in batches. */

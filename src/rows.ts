@@ -1,8 +1,9 @@
+// Turns what Gemini found into spreadsheet rows, and writes the notification text you see on your phone.
+// Each row's `type` picks its tab in the sheet: place → Places, recipe → Recipes, idea → Ideas,
+// mention → Mentions, failed → Failed. The columns each tab has are set in apps-script/Code.gs.
+
 import type { Mention, ParsedItem, PlaceMatch, Post, Row } from './types.js';
 import { countryName, mapsUrl } from './places.js';
-
-// Each row's `type` picks its tab in the sheet: place → Places, recipe → Recipes,
-// idea → Ideas, failed → Failed. The Apps Script owns each tab's column list.
 
 interface Base {
   savedAt: string;
@@ -27,6 +28,7 @@ export function countryFromAddress(address: string): string {
   return /\d/.test(last) ? '' : last;
 }
 
+/** The row for one place, recipe or idea. */
 export function itemRow(base: Base, item: ParsedItem, match: PlaceMatch | null = null): Row {
   const row: Row = { ...baseRow(base), type: item.type, title: item.title, summary: item.summary };
   if (item.place) {
@@ -96,11 +98,12 @@ export function mentionRows(base: Base, item: ParsedItem): Row[] {
   }));
 }
 
+/** The Failed-tab row for a save that didn't work, with the reason. */
 export function failedRow(base: Base, error: string): Row {
   return { ...baseRow(base), type: 'failed', error };
 }
 
-/** Text for the iOS notification. */
+/** Text for the iPhone notification, e.g. "Saved place: Ichiran" or "Saved 3 places: …". */
 export function summarize(items: ParsedItem[]): string {
   if (items.length === 1) return `Saved ${items[0].type}: ${items[0].title}`;
   const types = new Set(items.map((i) => i.type));

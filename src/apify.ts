@@ -1,3 +1,7 @@
+// Step 1: fetch the post. Apify (apify.com) runs ready-made "scrapers" that open a public Instagram or
+// TikTok post and return its caption, creator, video and photos. Each scraper is called an "actor".
+// A run is started, waited on, then its results are read and turned into a simple Post.
+
 import { PermanentError } from './errors.js';
 import type { Env, Platform, Post } from './types.js';
 
@@ -8,6 +12,7 @@ function actorFor(env: Env, platform: Platform): string {
   return id.replace('/', '~'); // Apify's URL form of "user/actor"
 }
 
+/** The settings each scraper is started with. */
 export function actorInput(platform: Platform, url: string): Record<string, unknown> {
   if (platform === 'instagram') {
     return { directUrls: [url], resultsType: 'posts', resultsLimit: 1, addParentData: false };
@@ -45,7 +50,7 @@ export async function startRun(env: Env, platform: Platform, url: string): Promi
 
 const DONE = new Set(['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT']);
 
-/** Long-polls the run (Apify holds each request up to 60s). */
+/** Waits for the run to finish. Each check is held open by Apify for up to 60s, so few checks are needed. */
 export async function waitForRun(env: Env, runId: string, maxSeconds = 300): Promise<void> {
   const deadline = Date.now() + maxSeconds * 1000;
   while (Date.now() < deadline) {
@@ -58,6 +63,7 @@ export async function waitForRun(env: Env, runId: string, maxSeconds = 300): Pro
   throw new Error('Scraper took too long');
 }
 
+/** The run's results (its "dataset"): normally one item, the post. */
 export async function getItems(env: Env, datasetId: string): Promise<any[]> {
   return apify(env, `/datasets/${datasetId}/items?clean=true&limit=5`);
 }
@@ -99,7 +105,10 @@ function first(...values: unknown[]): string {
   return '';
 }
 
-/** Map a raw dataset item to a Post, or throw if the post could not be read. */
+/**
+ * Turns the scraper's result into a Post, or throws if the post could not be read.
+ * If you swap in a different scraper (INSTAGRAM_ACTOR / TIKTOK_ACTOR), this is where its field names go.
+ */
 export function normalizeItem(platform: Platform, items: any[]): Post {
   const item = items[0];
   if (!item) throw new PermanentError('Post not found. It may be private or deleted');

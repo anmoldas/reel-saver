@@ -1,3 +1,6 @@
+// Talks to your Google Sheet. The sheet has a small script attached (apps-script/Code.gs) that is
+// published as a web address, SHEET_URL. Each function here sends it one request: { action, ... }.
+
 import { errorMessage, withRetry } from './errors.js';
 import type { GuideVideo, IdeaRow } from './guides.js';
 import type { PlaceNote } from './notes.js';

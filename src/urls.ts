@@ -1,5 +1,9 @@
+// Works out which post a shared link points to. Instagram and TikTok links come in many forms (share
+// links, short links, links with tracking bits); each is turned into one standard link per post.
+
 import type { Platform } from './types.js';
 
+// Short links are followed as if from an iPhone browser, which is what the sites expect.
 const UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
@@ -9,6 +13,7 @@ export function extractUrl(text: string): string | null {
   return m ? m[0] : null;
 }
 
+/** Instagram, TikTok, or null for any other site. */
 export function detectPlatform(u: URL): Platform | null {
   const host = u.hostname.toLowerCase();
   if (host === 'instagram.com' || host.endsWith('.instagram.com') || host === 'instagr.am') return 'instagram';
@@ -21,7 +26,7 @@ export function detectPlatform(u: URL): Platform | null {
 const IG_KINDS: Record<string, string> = { reel: 'reel', reels: 'reel', p: 'p', tv: 'tv' };
 
 /**
- * Returns the canonical post URL if `u` already points at a post, else null.
+ * The standard link for the post, if `u` already points straight at one, else null.
  * Instagram: https://www.instagram.com/reel/CODE/ (also handles /username/reel/CODE/)
  * TikTok:    https://www.tiktok.com/@user/video/ID
  */
@@ -58,7 +63,7 @@ export function tiktokIdWithoutUser(u: URL): string | null {
   return m ? m[2] : null;
 }
 
-/** Asks TikTok's oEmbed endpoint who posted a video, so the link gets its real username. */
+/** Asks TikTok's public embed service who posted a video, so the link gets its real username. */
 async function tiktokUrlFromId(id: string, fetchImpl: typeof fetch): Promise<string> {
   const res = await fetchImpl(
     `https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/@/video/${id}`)}`,
@@ -70,7 +75,10 @@ async function tiktokUrlFromId(id: string, fetchImpl: typeof fetch): Promise<str
   return `https://www.tiktok.com/@${user}/video/${id}`;
 }
 
-/** Follow redirects by hand until we land on a recognisable post URL. */
+/**
+ * Follows the link, one redirect at a time, until it reaches a post (at most 6 hops). Done by hand
+ * rather than letting fetch follow them, so it can stop as soon as the post's link is known.
+ */
 export async function resolvePostUrl(
   raw: string,
   fetchImpl: typeof fetch = fetch,
@@ -107,7 +115,7 @@ export async function resolvePostUrl(
       current = new URL(location, current);
       continue;
     }
-    // No redirect: look for a canonical link in the page as a last resort.
+    // No redirect: as a last resort, look for the post's own link in the page's HTML.
     const html = res.status === 200 ? await res.text() : '';
     const og = html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i) ?? html.match(/property="og:url"[^>]+content="([^"]+)"/i);
     if (og) {

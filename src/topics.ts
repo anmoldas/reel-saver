@@ -1,4 +1,6 @@
-// Used when the sheet's Topics / Place types tabs are empty or unreachable. The tabs are the source of truth.
+// The lists Gemini picks from: idea topics, place types and kinds of mention, plus how guides are named.
+// You change topics and place types in the sheet's Topics and Place types tabs, not here. The lists
+// below are only the starting set, and a fallback when those tabs are empty or can't be read.
 export const DEFAULT_TOPICS = [
   'Travel tips',
   'Clothing',
@@ -25,8 +27,10 @@ export const DEFAULT_PLACE_TYPES = [
   'stay',
 ];
 
-export const MENTION_KINDS = ['product', 'app/tool', 'brand', 'store', 'book', 'show/movie', 'course', 'person'];
+// The kinds of thing that go on the Mentions tab.
+export const MENTION_KINDS =['product', 'app/tool', 'brand', 'store', 'book', 'show/movie', 'course', 'person'];
 
+// The catch-all choices, always offered last.
 export const OTHER = 'Other';
 export const OTHER_PLACE = 'other';
 
@@ -74,6 +78,7 @@ export function guideList(fromSheet: unknown, max = Infinity): string[] {
     .slice(0, max);
 }
 
+/** All four lists, cleaned, from what the sheet sent (or the defaults). */
 export function lists(topics?: unknown, placeTypes?: unknown, guides?: unknown, cities?: unknown): Lists {
   return { topics: topicList(topics), placeTypes: placeTypeList(placeTypes), guides: guideList(guides), cities: guideList(cities, 80) };
 }

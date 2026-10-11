@@ -1,7 +1,10 @@
+// The shapes of the data passed around the app, in one place.
+
 import type { Lists } from './topics.js';
 
 export type Platform = 'instagram' | 'tiktok';
 
+/** Your keys and settings; see src/env.ts and .env.example. */
 export interface Env {
   SECRET: string;
   APIFY_TOKEN: string;
@@ -16,7 +19,7 @@ export interface Env {
 }
 
 export interface PipelineParams {
-  url: string; // canonical post URL
+  url: string; // the post's standard link (see src/urls.ts)
   platform: Platform;
   savedAt: string; // ISO timestamp of the share
   lists: Lists; // idea topics and place types, from the sheet's tabs
@@ -44,6 +47,7 @@ export interface Post {
 
 export type ItemType = 'recipe' | 'place' | 'idea';
 
+/** One place, recipe or idea Gemini found in a post. Only the part matching `type` is filled. */
 export interface ParsedItem {
   type: ItemType;
   title: string;
@@ -63,6 +67,7 @@ export interface Mention {
   price: string;
 }
 
+/** Everything Gemini found in one post. */
 export interface ParseResult {
   items: ParsedItem[];
   /** The model's own judgement that the caption was not enough. */
@@ -71,6 +76,7 @@ export interface ParseResult {
   just_for_fun: boolean;
 }
 
+/** What Google Maps found for a place. */
 export interface PlaceMatch {
   placeId: string;
   /** From the address; empty when Google has none. */
@@ -82,4 +88,5 @@ export interface PlaceMatch {
   mapsUrl: string;
 }
 
-export type Row = Record<string, string | number>;
+/** One spreadsheet row: column name → value. */
+export type Row =Record<string, string | number>;

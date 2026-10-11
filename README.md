@@ -243,6 +243,56 @@ all optional, set as Vercel env vars:
 - `INSTAGRAM_ACTOR` / `TIKTOK_ACTOR`: Apify actor IDs. defaults `apify/instagram-scraper`, `clockworks/tiktok-scraper`. if one starts failing, swap it here. a different actor may name its output fields differently, see `normalizeItem` in `src/apify.ts`
 - `CONFIDENCE_THRESHOLD`, `SYNC_WAIT_SECONDS`
 
+## how the code fits together
+
+curious how it works, or want to change something? every file starts with a short note on what it does. the path a shared link takes:
+
+1. **your iPhone Shortcut** sends the link and your secret to the app on Vercel.
+2. **`api/share.ts`** checks the secret, tidies the link (`src/urls.ts`) and asks the sheet whether it's already saved.
+3. **`src/pipeline.ts`** runs the save: Apify fetches the post (`src/apify.ts`), Gemini reads it (`src/gemini.ts`), Google Places finds the address (`src/places.ts`), and the results become rows (`src/rows.ts`).
+4. **`apps-script/Code.gs`**, which lives inside your google sheet, writes those rows to the right tabs.
+
+| to change… | look in |
+|---|---|
+| what Gemini saves and how it decides | `instructions()` in `src/gemini.ts` |
+| the starting topics and place types | the **Topics** and **Place types** tabs in your sheet |
+| how guides are named | `GUIDE_NAMING` in `src/topics.ts` |
+| a tab's columns | `TABS` at the top of `apps-script/Code.gs` |
+| the notification text | `summarize()` in `src/rows.ts` |
+
+the `scripts/` folder holds the tools you run from your computer: `setup.mjs`, `import-saves.mjs`, `retry-failed.mjs` and `build-guides.mjs`. each one explains itself at the top.
+
+## bonus: turn it into a dashboard
+
+a sheet is great for storing your faves, but a dashboard is nicer for browsing them. you can make one in a few minutes with [Claude](https://claude.ai) or Meta's [Muse](https://muse.ai), no code needed: share your sheet and describe what you want. a search bar, topic filters, a map of every place in a city, ideas as cards with their takeaways, a "mark done" button. ask for whatever you'd actually use.
+
+a few made from the same sheet:
+
+<img src="docs/dashboard-places.png" alt="a dark dashboard with a search bar, topic filters, tabs for places, ideas and mentions, and a color-coded map of places in New York City" width="100%">
+
+<p>
+  <img src="docs/dashboard-ideas.png" alt="idea cards with a summary, takeaways, the products mentioned and a link to the creator's video" width="49%">
+  <img src="docs/dashboard-recipes.png" alt="a light dashboard with counts of places, recipes and mentions, and recipe cards with ingredients and steps" width="49%">
+</p>
+
+here's a prompt to start from. swap in your sheet's link:
+
+> Build me a dashboard for my saved Instagram reels and TikToks. The data is in this Google Sheet: [YOUR SHEET LINK]. Read it live, so new saves show up when I refresh.
+>
+> The sheet has these tabs: **Places** (restaurants, shops and sights, with city, category, address, what to order, and a Maps link), **Recipes** (ingredients and steps), **Ideas** (tips with a topic and takeaways), **Mentions** (products, apps and brands the videos recommend) and **Guides** (ideas on the same subject combined). Every row has a creator, a source link and a "done" checkbox.
+>
+> I'd like:
+> - a search bar across everything
+> - tabs for places, recipes, ideas and mentions, each showing how many there are
+> - for places, a city picker and a map of that city with a pin per place, color-coded by category
+> - topic filters for ideas, with each idea as a card showing its summary, takeaways, what it mentions, and a link to the original video
+> - for recipes, ingredients and steps I can expand
+> - a way to filter by creator and hide what I've marked done
+>
+> Make it clean and easy to read on my phone.
+
+then keep asking for changes until it feels like yours: "make it dark mode", "group places by neighborhood", "show my most-mentioned products first".
+
 ## develop
 
 ```sh

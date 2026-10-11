@@ -1,3 +1,5 @@
+// Used only by scripts/retry-failed.mjs, which reads the Failed tab through here and tries those saves again.
+
 import { getEnv } from '../src/env.js';
 import { errorMessage } from '../src/errors.js';
 import { secretMatches } from '../src/secret.js';
@@ -7,7 +9,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 /**
- * Sheet upkeep, driven by scripts/retry-failed.mjs.
+ * What the script can ask for (every request includes your secret):
  *   POST { secret, action: 'failed' } → every row in the Failed tab
  */
 export async function POST(request: Request): Promise<Response> {

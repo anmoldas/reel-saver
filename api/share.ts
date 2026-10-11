@@ -1,3 +1,7 @@
+// The front door. Your iPhone Shortcut sends each shared link here (https://YOUR-APP.vercel.app/api/share),
+// and so do the import and retry scripts. This file checks the secret, tidies up the link, skips posts
+// you already saved, then hands the real work to src/pipeline.ts.
+
 import { waitUntil } from '@vercel/functions';
 import { getEnv } from '../src/env.js';
 import { errorMessage } from '../src/errors.js';
@@ -11,6 +15,7 @@ import { extractUrl, resolvePostUrl } from '../src/urls.js';
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+/** The request body, whether it was sent as JSON or as a form. */
 async function readBody(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text();
   try {
@@ -20,11 +25,16 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
+/** Opening the address in a browser just says the app is running. */
 export function GET(): Response {
   return json({ ok: true, service: 'save-faves' });
 }
 
-/** POST { url, secret, saved_at?, wait?, note?, guides? } from the iOS Shortcut or an import script. Always answers with { ok, message }. */
+/**
+ * Saves one post. The body is { url, secret } from the Shortcut; the scripts can also send
+ * saved_at, note, wait and guides (explained below). Always answers with { ok, message }, and the
+ * Shortcut shows that message as a notification.
+ */
 export async function POST(request: Request): Promise<Response> {
   try {
     return await handle(request);
@@ -52,7 +62,8 @@ async function handle(request: Request): Promise<Response> {
   const givenDate = typeof body.saved_at === 'string' ? new Date(body.saved_at) : null;
   const savedAt = (givenDate && !isNaN(givenDate.getTime()) ? givenDate : new Date()).toISOString();
 
-  // Resolve short links so duplicates are detected on one canonical URL.
+  // The same post can arrive as a share link, a short link or the full link. Turn them all into one
+  // standard link, so a post saved twice is spotted as a repeat.
   let resolved;
   try {
     resolved = await resolvePostUrl(raw);
@@ -63,6 +74,8 @@ async function handle(request: Request): Promise<Response> {
   }
   const { url, platform } = resolved;
 
+  // Ask the sheet whether this post is already saved. The same call returns your topics, place types,
+  // guide names and cities, which Gemini picks from so new rows match the ones you have.
   let lists = listsFrom();
   try {
     const existing = await findExisting(env, url);
@@ -72,7 +85,7 @@ async function handle(request: Request): Promise<Response> {
     console.log(`[save-faves] duplicate check failed, continuing: ${errorMessage(err)}`);
   }
 
-  // Build step 2: `"stub": true` writes a placeholder row without calling Apify or Gemini.
+  // For testing the setup: `"stub": true` writes a placeholder row without calling Apify or Gemini.
   if (body.stub === true || body.stub === 'true') {
     await writeRows(env, url, [{ saved_at: savedAt, type: 'idea', topic: 'Other', title: 'Stub row', source_url: url }]);
     return json({ ok: true, message: `Stub row written for ${url}` });
@@ -86,7 +99,9 @@ async function handle(request: Request): Promise<Response> {
   // Imports ask to wait for the real outcome, so they can stop on errors.
   if (body.wait === true || body.wait === 'true') return json(await work);
 
-  // Keep running after we answer; wait briefly so fast saves get a real confirmation.
+  // A save can take a minute or two, longer than the Shortcut wants to wait. So wait up to
+  // SYNC_WAIT_SECONDS: quick saves get a real "Saved place: …" notification, slower ones get
+  // "Saving…" and keep running in the background (that's what waitUntil allows).
   waitUntil(work);
   const quick = await Promise.race([
     work,

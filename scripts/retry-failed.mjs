@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Tries the saves in the Failed tab again: the ones that failed for a reason that passes (Gemini busy,
 // a timeout, a hiccup), whether they came from your phone or an import. Each keeps its original date,
-// and a save that works now (or turns out to have nothing worth saving) clears its Failed row. Deleted or private posts, and posts with nothing
-// to save, are listed but not retried.
+// and a save that works now (or turns out to have nothing worth saving) clears its Failed row.
+// Deleted or private posts, and posts with nothing to save, are listed but not retried.
 //
 //   node scripts/retry-failed.mjs --url https://YOUR-APP.vercel.app             retry them
 //   node scripts/retry-failed.mjs --url https://YOUR-APP.vercel.app --dry-run   list them, send nothing
@@ -59,7 +59,6 @@ async function post(path, body) {
 
 const list = await post('/api/maintenance', { action: 'failed' });
 if (!list.ok) die(list.message ?? 'Could not read the Failed tab');
-if (!Array.isArray(list.rows)) die('The sheet did not understand "failed". Paste the new Code.gs and deploy a new version first.');
 
 const firstLine = (s) => String(s).split('\n')[0].slice(0, 160);
 const retry = list.rows.filter((r) => r.source_url && !PERMANENT.test(r.error));

@@ -1,14 +1,18 @@
+// When several posts recommend the same place, it keeps one row in the Places tab and their tips on
+// what to order are joined. Here Gemini rewrites those joined tips into one line without repeats.
+
 import { askJson } from './gemini.js';
 import type { Env } from './types.js';
 
-/** A Places row's notes, as the Sheet sends it: found again by its first link and title. */
+/** A Places row's what_to_order notes. The row is found again by its first link and title. */
 export interface PlaceNote {
   source_url: string;
   title: string;
   what_to_order: string;
 }
 
-export const NOTES_RULES = `Each place below was recommended by several saved social media posts, and "notes" joins what each post said to order, buy or do there, separated by ";".
+/** The instructions Gemini follows when rewriting the notes. */
+export const NOTES_RULES =`Each place below was recommended by several saved social media posts, and "notes" joins what each post said to order, buy or do there, separated by ";".
 
 For each place, rewrite its notes as one short line:
 - Say each thing once. When notes say the same thing in different words ("book 6 weeks ahead", "book tickets weeks in advance"), keep the most specific version (numbers, names, dishes).
@@ -16,6 +20,7 @@ For each place, rewrite its notes as one short line:
 - Never add anything the notes don't say. Write in English.
 Return every place with its "id" unchanged.`;
 
+// Places sent to Gemini per request.
 const BATCH = 40;
 
 function schema() {

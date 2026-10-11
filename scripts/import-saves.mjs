@@ -26,7 +26,6 @@ import { dirname, join } from 'node:path';
 
 const STATE = '.import-progress.json';
 const DEFAULT_LIMIT = 50;
-const OLD_STATE = '.tiktok-import.json'; // from before Instagram support; read, never written
 
 function die(msg) {
   console.error(`✗ ${msg}`);
@@ -131,12 +130,12 @@ function readExport(path) {
   die(`${path} is not a TikTok or Instagram export in JSON format`);
 }
 
-/** Progress from both files; re-read before each write so two imports at once don't overwrite each other. */
+/** What earlier runs already sent: { link: { done, message, at } }. */
 function readState() {
-  const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {});
-  return { ...read(OLD_STATE), ...read(STATE) };
+  return existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {};
 }
 
+/** Records one save. Re-reads the file first so two imports at once don't overwrite each other. */
 function saveProgress(link, entry) {
   const current = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {};
   current[link] = entry;
@@ -176,9 +175,7 @@ async function main() {
     .flatMap(readExport)
     .filter((f) => !seen.has(f.link) && seen.add(f.link)) // the same post saved on two accounts
     .sort((a, b) => String(b.savedAt ?? '').localeCompare(String(a.savedAt ?? '')));
-  // Older progress files marked fewer outcomes as done, so check the message too.
-  const done = (link) => state[link]?.done || FINAL.test(state[link]?.message ?? '');
-  const todo = all.filter((f) => (!f.savedAt || Date.parse(f.savedAt) >= sinceMs) && !done(f.link));
+  const todo = all.filter((f) => (!f.savedAt || Date.parse(f.savedAt) >= sinceMs) && !state[f.link]?.done);
   const batch = todo.slice(0, opts.limit);
   console.log(`${todo.length} saves to send${opts.since ? ` since ${opts.since}` : ''}; sending the newest ${batch.length} this run.`);
   if (batch.length) console.log(`That's ${estimate(batch)}.`);
