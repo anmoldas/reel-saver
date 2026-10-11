@@ -134,6 +134,8 @@ bring in your past TikTok favorites and Instagram saved posts. three things to k
 - **it runs on your computer**, not online. your computer has to stay on, awake and connected the whole time. if it sleeps or you close the window, it just stops; run the same command again and it picks up where it left off.
 - **it's slow on purpose.** it sends one post at a time and waits for each to finish, so figure on 30 seconds to a minute per post: 100 posts takes one to two hours, 500 takes five to nine. plug in your laptop.
 - **it uses the same $5 of Apify credit as your everyday saves.** that's about 500 TikToks or 1,500 Instagram posts a month in total (see [what it costs](#what-it-costs)). if an import uses it all up, sharing new reels fails until next month. so leave some room: import a few hundred at a time with `--limit`, and do the rest next month. you can see what's left on apify.com under **Billing**.
+- **it also uses Gemini's free daily allowance**, which your everyday saves share too. a long import can use up a day's worth (it happened to us after a few hundred posts). when that happens the import stops by itself and says so, and sharing reels from your phone fails until the allowance resets at midnight Pacific time. so import in small batches, and not on a day you'll be saving lots of reels.
+- **it sends 50 at a time unless you say otherwise.** each run tells you how long it'll take and roughly what it'll cost before it starts. `--limit 10` for a first test, `--limit 200` for a bigger batch, `--all` for everything (only if you've checked the cost).
 
 ask each app for your data in **JSON** format:
 
@@ -146,11 +148,13 @@ see how many there are first (this sends nothing and costs nothing):
 node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --dry-run
 ```
 
-then send the newest ones, a batch at a time:
+then send a small test batch of the newest ones, and look at them in your sheet:
 
 ```sh
-node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https://YOUR-APP.vercel.app --since 2025-01-01 --limit 300
+node scripts/import-saves.mjs user_data_tiktok.json instagram-folder --url https://YOUR-APP.vercel.app --since 2025-01-01 --limit 10
 ```
+
+if they look right, run the same command without `--limit` to send the next 50, and repeat (a batch or two a day is a good pace).
 
 on a mac, put `caffeinate -i` in front of the command to keep it from sleeping while it runs. on windows, set Settings → System → Power → Sleep to Never while it runs.
 

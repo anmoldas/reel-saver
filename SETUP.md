@@ -136,6 +136,8 @@ Ask whether they want their past TikTok favorites and Instagram saved posts in t
 - **It runs on this computer.** It has to stay on, awake, plugged in and online, with this Claude Code window open, until it finishes. If it stops (sleep, lid closed, window closed), running the same command again continues where it left off.
 - **It takes a while:** 30 seconds to a minute per post, so 100 posts takes one to two hours and 500 takes five to nine. A good time is when they won't need the computer, or in batches.
 - **It shares the $5 monthly Apify credit with their everyday saves.** About 500 TikToks or 1,500 Instagram posts a month in total. If the import uses it up, new saves from their phone fail until next month.
+- **It also shares Gemini's free daily allowance with their everyday saves.** A few hundred posts in one day can use it up; the import then stops with a plain explanation, and phone saves fail until it resets at midnight Pacific time. Plan on a batch or two a day, not everything at once.
+- **It sends 50 per run by default** and prints the time and cost estimate first. `--limit N` changes the batch, `--all` removes the cap (only after you've agreed the cost with them).
 
 If yes, have them request their data (it takes minutes to a day, so they can do this first and come back):
 
@@ -146,9 +148,9 @@ Then:
 
 1. Have them put the zips in this folder, or tell you where they are. Unzip each into its own new folder. For TikTok, only read the favorites part of `user_data_tiktok.json`; the file also holds their DMs, which you don't need.
 2. Preview: `node scripts/import-saves.mjs <tiktok json> <instagram folder> --dry-run`. Pass whichever exports they have. Tell them how many saves there are per year, and which Instagram collections they're in (those go in the notes column).
-3. Pick a batch together. From the preview count, say how long it will take and roughly what share of the $5 it uses. Keep about $1 back for everyday saves: at most about **400 TikToks or 1,300 Instagram posts in a month**, fewer if Apify already shows usage this month (apify.com → **Billing**). Suggest the newest first with `--since` (e.g. `--since 2025-01-01`), a batch size with `--limit`, and a quick `--limit 10` test they look at in the sheet before the big run. If they have more than one month's worth, tell them to do the rest next month with the same command.
+3. Pick a batch together. From the preview count, say how long it will take and roughly what share of the $5 it uses. Keep about $1 back for everyday saves: at most about **400 TikToks or 1,300 Instagram posts in a month**, fewer if Apify already shows usage this month (apify.com → **Billing**). Suggest the newest first with `--since` (e.g. `--since 2025-01-01`), always start with a `--limit 10` test they look at in the sheet, then batches of the default 50 (or a `--limit` you agree on), at most a few hundred a day because of Gemini's daily allowance. If they have more than one month's worth, tell them to do the rest next month with the same command.
 4. Keep the computer awake while it runs: on a Mac put `caffeinate -i` in front of the command; on Windows have them set **Settings → System → Power → Sleep** to **Never** for now (and set it back afterwards).
-5. Run it with `--url https://<their-app>.vercel.app`, the agreed `--since` / `--limit`, and without `--dry-run`. Run it in the background so it isn't cut off by a command time limit, and check on it now and then. It sends one at a time, newest first, keeps the date they saved each one, skips deleted posts and just-for-fun ones, and stops by itself on errors like running out of Apify credit. When it ends, tell them how many were saved, skipped and failed, and what's left for next time.
+5. Run it with `--url https://<their-app>.vercel.app`, the agreed `--since` / `--limit`, and without `--dry-run`. Run it in the background so it isn't cut off by a command time limit, and check on it now and then. It sends one at a time, newest first, keeps the date they saved each one, skips deleted posts and just-for-fun ones, and stops by itself on errors like running out of Apify credit or Gemini's daily allowance (it prints what happened and what to do). When it ends, tell them how many were saved, skipped and failed, and what's left for next time.
 6. Imports don't update the **Guides** tab after every save. When it's finished, run `node scripts/build-guides.mjs --url https://<their-app>.vercel.app --rebuild` once (a few Gemini calls, no Apify cost).
 
 ---
@@ -168,7 +170,7 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 | A row in **Failed**: `Post not found` / `Post unavailable` | Private or deleted post | Nothing to fix; it can't be read. |
 | Failed: `Could not download the video (403)` | Very rare; the video link expired | Share it again. |
 | Failed: `Apify 402` or a credits message | The month's free Apify credit is used up | Wait for next month, or add credit at apify.com. |
-| Failed: `Gemini 429` | Free-tier rate limit (too many saves at once) | Wait a minute and share again. |
+| Failed: `Gemini 429` | Free-tier limit: too many saves in a minute, or (if it says "exceeded your current quota") the day's allowance is used up | Per-minute: wait a minute and share again. Daily: wait until after midnight Pacific time; an import picks up where it stopped. |
 | "Skipped: just for fun" | Gemini judged the post to be only entertainment, so no row was added | Expected. If it got one wrong, there's no override yet; sharing again will usually give the same answer. |
 | Failed: `Found nothing to save in this post` | Gemini couldn't find a place, recipe or tip, but wasn't sure it was just for fun | Usually nothing to fix. Delete the Failed row if they don't care about it. |
 | Failed: `Timed out after 240s` | A slow scrape or long video | Share again. |
