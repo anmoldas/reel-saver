@@ -111,6 +111,7 @@ Classify what the post is worth saving for:
 
 Rules:
 - A post can mention several places. Return one item per place. A list of tips is one idea, not one item per tip.
+- A recipe is saved as a recipe. Don't also return an idea that repeats it (the dish, its ingredients, its steps, or the gadget used to cook it). Add an idea only for separate advice the recipe doesn't already hold.
 - Leave the sub-objects that do not match the item's type as null.
 - "title" is short (the place name, the dish, or what the idea is about). "summary" is one line on why it is worth saving.
 - "confidence" is 0 to 1: how sure you are that the item is complete and correct.
@@ -118,6 +119,7 @@ Rules:
 - An unknown field is an empty string. Never write placeholders like "Not specified", "N/A" or "Various", and never add notes about what is missing.
 - Set "needs_video" to true when the text alone is not enough, for example a recipe whose steps are only spoken in the video, a place whose name or city is only shown on screen, or tips that are only said out loud.
 - Set "just_for_fun" to true, with no items, when the post is only entertainment: jokes, skits, memes, relatable humour, pranks, dances, reactions, pets, or a personal vlog with nothing someone could visit, cook, buy or learn. A funny post that still names a real place, product or useful tip is not just for fun: return those items. If the text alone cannot tell, set "needs_video" instead.
+- Also set "just_for_fun" to true, with no items, when the post has nothing worth keeping even though it isn't a joke: the creator only asks viewers for suggestions ("what rain boots should I get?") without giving their own; a giveaway or contest; a promo or interview that only plugs someone's own book, show or product; or news that will soon be out of date (a policy update, a sale ending this week). If such a post also gives real recommendations or tips of its own, return those instead.
 - Write in English.`;
 }
 

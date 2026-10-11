@@ -10,7 +10,7 @@
 
 ## Instructions for Claude Code
 
-You are setting up **Save Faves** for someone who is probably not a developer. When it's done, they tap Share on an Instagram reel or TikTok, and a row appears in their Google Sheet: a **place** (with a Maps link), a **recipe** (ingredients and steps), or an **idea** (tips, with key takeaways). Products, apps and brands that creators recommend also go on a **Mentions** list. Posts that are just for fun are skipped.
+You are setting up **Save Faves** for someone who is probably not a developer. When it's done, they tap Share on an Instagram reel or TikTok, and a row appears in their Google Sheet: a **place** (with a Maps link), a **recipe** (ingredients and steps), or an **idea** (tips, with key takeaways). Products, apps and brands that creators recommend also go on a **Mentions** list. Posts with nothing worth keeping (jokes, giveaways, creators asking for suggestions) are skipped.
 
 How it works: an iOS Shortcut sends the link to a small Vercel function. The function fetches the post with Apify, reads it (and the video when needed) with Gemini, optionally looks up places with Google Places, and writes rows to their Google Sheet through an Apps Script web app.
 
@@ -127,7 +127,7 @@ Finish with a short tour in plain words:
 - **Topics** and **Place types** tabs: these are the lists Gemini sorts into. Encourage them to replace the starter topics with their own interests (e.g. Fitness, Skincare, Home). Adding a row is all it takes; no code. Ideas that fit nothing land in **Other** with a **suggested_topic**, which shows which topics to add.
 - **Failed** tab: anything that couldn't be saved, with the reason. Sharing the same link again retries it, or `node scripts/retry-failed.mjs --url https://<their-app>.vercel.app` retries every one that might work now.
 - Sharing the same post twice says "Already saved".
-- Posts that are just for fun (jokes, memes, skits) say "Skipped: just for fun" and add no row.
+- Posts with nothing worth keeping (jokes, memes, skits, giveaways, creators asking for suggestions) say "Skipped: nothing worth saving" and add no row.
 
 ### Step 9 (optional): Bring in what they've already saved
 
@@ -171,8 +171,8 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 | Failed: `Could not download the video (403)` | Very rare; the video link expired | Share it again. |
 | Failed: `Apify 402` or a credits message | The month's free Apify credit is used up | Wait for next month, or add credit at apify.com. |
 | Failed: `Gemini 429` | Free-tier limit: too many saves in a minute, or (if it says "exceeded your current quota") the day's allowance is used up | Per-minute: wait a minute and share again. Daily: wait until after midnight Pacific time; an import picks up where it stopped. |
-| "Skipped: just for fun" | Gemini judged the post to be only entertainment, so no row was added | Expected. If it got one wrong, there's no override yet; sharing again will usually give the same answer. |
-| Failed: `Found nothing to save in this post` | Gemini couldn't find a place, recipe or tip, but wasn't sure it was just for fun | Usually nothing to fix. Delete the Failed row if they don't care about it. |
+| "Skipped: nothing worth saving" | Gemini judged the post to be only entertainment, or a question, giveaway, promo or soon-outdated news with no tips of its own, so no row was added | Expected. If it got one wrong, there's no override yet; sharing again will usually give the same answer. |
+| Failed: `Found nothing to save in this post` | Gemini couldn't find a place, recipe or tip, but wasn't sure there was nothing worth keeping | Usually nothing to fix. Delete the Failed row if they don't care about it. |
 | Failed: `Timed out after 240s` or `Gemini 503` | A slow scrape or long video, or Gemini was busy | Share again, or run `scripts/retry-failed.mjs` to retry all of these at once. |
 | A place has no address or coordinates | No `PLACES_API_KEY` (optional), or Places couldn't find it | Expected without Places. Otherwise the Maps link still works. |
 | Shortcut shows nothing or an error page | Wrong URL in the Shortcut | It must be the app address followed by `/api/share`. |

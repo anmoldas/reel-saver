@@ -1,6 +1,6 @@
 # save faves
 
-tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways, sorted into [topics you pick](#topics). ideas on the same subject are combined into [guides](#guides), so ten videos about one trip become one list. every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts that are just for fun are skipped.
+tap **Share** on an instagram reel or tiktok, and it lands in your own google sheet, already sorted: **places** with a maps link, **recipes** with ingredients and steps, and **ideas** (tips, advice, how-tos) with the key takeaways, sorted into [topics you pick](#topics). ideas on the same subject are combined into [guides](#guides), so ten videos about one trip become one list. every product, app or brand a creator recommends also goes on a **mentions** list, so you can see what keeps coming up and tick off what you bought or tried. posts with nothing worth keeping are skipped.
 
 <!-- TODO screenshot: the sheet (Places / Ideas / Mentions tabs) next to the phone notification "Saved place: …" -->
 
@@ -54,11 +54,12 @@ so roughly 500 tiktoks or 1,500 instagram posts a month before Apify's free cred
 
 ## how it decides
 
-- **caption first.** Gemini reads the caption and decides whether the post is a place, a recipe, an idea or just for fun.
+- **caption first.** Gemini reads the caption and decides whether the post is a place, a recipe, an idea, or nothing worth keeping.
 - **then the video, when the caption isn't enough.** for places and recipes that's when Gemini asks for it, a recipe is missing ingredients or steps, a place has no name or city, or confidence is below `CONFIDENCE_THRESHOLD` (0.7). ideas always get the video, because tips are usually spoken and the caption is just a teaser.
 - **photos and carousels** work the same way, with the images instead of a video: up to 10 slides, including any text on them. a carousel with a video slide gets both, and tiktok photo slideshows count too.
 - **several places in one post** become one row each.
-- **just for fun is skipped.** jokes, memes, skits, pets and vlogs with nothing to visit, cook, buy or learn get "Skipped: just for fun" and no row. if the caption can't tell, it watches the video first. a funny post that still names a place, product or tip is saved.
+- **posts with nothing to keep are skipped.** jokes, memes, skits, pets and vlogs with nothing to visit, cook, buy or learn get "Skipped: nothing worth saving" and no row. so do creators asking their followers for suggestions, giveaways, promos that only plug the creator's own book or show, and news that will soon be out of date. if the caption can't tell, it watches the video first. a post that still names a place, product or tip of its own is saved.
+- **a recipe isn't saved twice.** a recipe post becomes a Recipes row; it only gets an Ideas row as well when it gives separate advice the recipe doesn't hold.
 - **duplicates**: share links are cleaned up first (`instagram.com/share/...`, `vm.tiktok.com/...` and `?igsh=` all point to the same post), so sharing a post twice says "Already saved: X" and nothing runs. failed saves are the exception: sharing again retries them.
 - **thumbnails** are copied to a `Reel Saver thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
 
@@ -174,7 +175,7 @@ iOS share sheet ──▶ Vercel function (api/share.ts)
                           → Google Places → Apps Script → Google Sheet
 ```
 
-the shortcut waits up to 20 seconds. if the save finishes in that time you get "Saved place: X", otherwise "Saving…" and the row shows up a bit later. posts that are just for fun get "Skipped: just for fun". anything that fails still gets a row in the **Failed** tab with the error, and sharing the same link again retries it. to retry everything there that might work now (Gemini was busy, a save timed out), run `node scripts/retry-failed.mjs --url https://YOUR-APP.vercel.app`; add `--dry-run` to only list them. deleted or private posts, and posts with nothing to save, are left alone. each save that works removes its Failed row.
+the shortcut waits up to 20 seconds. if the save finishes in that time you get "Saved place: X", otherwise "Saving…" and the row shows up a bit later. posts with nothing worth keeping get "Skipped: nothing worth saving". anything that fails still gets a row in the **Failed** tab with the error, and sharing the same link again retries it. to retry everything there that might work now (Gemini was busy, a save timed out), run `node scripts/retry-failed.mjs --url https://YOUR-APP.vercel.app`; add `--dry-run` to only list them. deleted or private posts, and posts with nothing to save, are left alone. each save that works removes its Failed row.
 
 ## doing it by hand
 

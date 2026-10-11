@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Tries the saves in the Failed tab again: the ones that failed for a reason that passes (Gemini busy,
 // a timeout, a hiccup), whether they came from your phone or an import. Each keeps its original date,
-// and a save that works now (or turns out to be just for fun) clears its Failed row. Deleted or private posts, and posts with nothing
+// and a save that works now (or turns out to have nothing worth saving) clears its Failed row. Deleted or private posts, and posts with nothing
 // to save, are listed but not retried.
 //
 //   node scripts/retry-failed.mjs --url https://YOUR-APP.vercel.app             retry them
@@ -91,4 +91,4 @@ for (const [i, r] of retry.entries()) {
   if (i < retry.length - 1) await new Promise((res) => setTimeout(res, delay * 1000));
 }
 if (stopReason) console.log(`Stopped: ${stopReason}`);
-console.log(`Done: ${counts.saved} saved, ${counts.skipped} skipped as just for fun, ${counts.failed} still failing (they stay in the Failed tab).`);
+console.log(`Done: ${counts.saved} saved, ${counts.skipped} skipped as not worth saving, ${counts.failed} still failing (they stay in the Failed tab).`);

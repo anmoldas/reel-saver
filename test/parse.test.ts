@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeItem } from '../src/apify.js';
 import { PermanentError } from '../src/errors.js';
-import { apiError, needsVideo, normalizeParse } from '../src/gemini.js';
+import { apiError, instructions, needsVideo, normalizeParse } from '../src/gemini.js';
 import { cityAndCountry, countryName } from '../src/places.js';
 import { countryFromAddress, itemRow, mentionRows, shopLink, summarize } from '../src/rows.js';
 import { DEFAULT_PLACE_TYPES, DEFAULT_TOPICS, lists, placeTypeList, topicList } from '../src/topics.js';
@@ -296,5 +296,14 @@ describe('placeholders and place names', () => {
     const body = JSON.stringify({ error: { code: 503, message: 'This model is currently\n experiencing high demand.', status: 'UNAVAILABLE' } }, null, 2);
     expect(apiError(body)).toBe('UNAVAILABLE: This model is currently experiencing high demand.');
     expect(apiError('<html>\n oops')).toBe('<html> oops');
+  });
+});
+
+describe('what is not worth saving', () => {
+  it('tells Gemini to skip questions, giveaways, plugs and stale news, and not to repeat a recipe as an idea', () => {
+    const text = instructions(lists());
+    expect(text).toMatch(/asks viewers for suggestions/);
+    expect(text).toMatch(/giveaway/);
+    expect(text).toMatch(/Don't also return an idea that repeats it/);
   });
 });

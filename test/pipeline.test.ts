@@ -97,7 +97,7 @@ describe('runPipeline', () => {
   it('skips a just-for-fun post without watching the video or writing a row, clearing an earlier failure', async () => {
     const svc = fakeServices({ caption: 'when your cat hears the treat bag 😂', captionParse: { needs_video: false, just_for_fun: true, items: [] } });
     const result = await runPipeline(env, params);
-    expect(result).toEqual({ ok: true, skipped: true, message: 'Skipped: just for fun, nothing to save' });
+    expect(result).toEqual({ ok: true, skipped: true, message: 'Skipped: nothing worth saving' });
     expect(svc.geminiCalls()).toBe(1);
     expect(svc.sheetWrites).toEqual([{ secret: 's', action: 'write', source_url: params.url, rows: [] }]);
   });
