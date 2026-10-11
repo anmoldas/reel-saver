@@ -12,7 +12,7 @@ const DEADLINE_MS = 240_000;
 // Updating a guide is skipped when less time than this is left; the next save to that guide catches up.
 const GUIDE_TIME_MS = 60_000;
 
-const log = (url: string, msg: string) => console.log(`[reel-saver] ${url} ${msg}`);
+const log = (url: string, msg: string) => console.log(`[save-faves] ${url} ${msg}`);
 
 /**
  * Fetch → parse → enrich → store. Never throws: any failure becomes a "failed" row

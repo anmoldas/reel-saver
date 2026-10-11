@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sends the posts you saved on TikTok or Instagram to Reel Saver, one at a time, keeping each
+// Sends the posts you saved on TikTok or Instagram to Save Faves, one at a time, keeping each
 // post's original save date. Works with each app's "Download your data" export in JSON format:
 //   TikTok:    user_data_tiktok.json (your Favorites)
 //   Instagram: the unzipped export folder, or its your_instagram_activity/saved/saved_posts.json
