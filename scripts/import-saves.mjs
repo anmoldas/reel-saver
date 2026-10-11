@@ -8,7 +8,8 @@
 //   node scripts/import-saves.mjs EXPORT [EXPORT…] --url https://YOUR-APP.vercel.app [options]
 //
 //   --since 2025-01-01   only favorites saved on or after this date
-//   --limit 50           stop after this many sends
+//   --limit 50           how many to send this run (default 50, newest first)
+//   --all                no limit: send everything left (mind the Apify credit and Gemini's daily limit)
 //   --delay 5            seconds between sends (default 5; each send already waits for the save to finish)
 //   --dry-run            list what would be sent, send nothing
 //
@@ -17,12 +18,14 @@
 // and so is a video Gemini is too busy to watch right now (it is tried again on the next run).
 // The SECRET comes from .env.local (or the SECRET environment variable); it is never printed.
 // Progress is kept in .import-progress.json, so running the same command again picks up where it stopped.
-// Newest saves go first.
+// Newest saves go first. Each run sends at most 50 unless you say otherwise, because every save uses
+// Apify credit and Gemini's free daily allowance, which your everyday saves share.
 
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const STATE = '.import-progress.json';
+const DEFAULT_LIMIT = 50;
 const OLD_STATE = '.tiktok-import.json'; // from before Instagram support; read, never written
 
 function die(msg) {
@@ -31,13 +34,14 @@ function die(msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { delay: 5, limit: Infinity, since: null, dryRun: false, url: '', files: [] };
+  const opts = { delay: 5, limit: DEFAULT_LIMIT, since: null, dryRun: false, url: '', files: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--url') opts.url = argv[++i] ?? '';
     else if (a === '--since') opts.since = argv[++i] ?? '';
     else if (a === '--limit') opts.limit = Number(argv[++i]);
+    else if (a === '--all') opts.limit = Infinity;
     else if (a === '--delay') opts.delay = Number(argv[++i]);
     else if (!a.startsWith('--')) opts.files.push(a);
     else die(`Unknown option: ${a}`);
@@ -139,6 +143,24 @@ function saveProgress(link, entry) {
   writeFileSync(STATE, JSON.stringify(current, null, 1));
 }
 
+/** Rough time and Apify cost for a batch, so nobody starts 1,000 saves by accident. */
+function estimate(batch) {
+  const tiktoks = batch.filter((f) => !f.link.includes('instagram.com')).length;
+  const posts = batch.length - tiktoks;
+  const low = tiktoks * 0.005 + posts * 0.003;
+  const high = tiktoks * 0.01 + posts * 0.004;
+  const hours = (n) => (n < 60 ? `${Math.max(1, Math.round(n))} min` : `${(n / 60).toFixed(1)} h`);
+  return `about ${hours(batch.length * 0.5)}–${hours(batch.length)} and $${low.toFixed(2)}–$${high.toFixed(2)} of Apify credit`;
+}
+
+// Errors that mean "stop for today", with what to tell the person.
+const EXPLAIN = [
+  [/exceeded your current quota|RESOURCE_EXHAUSTED|Gemini 429/i,
+    "Gemini's free daily allowance is used up. Everyday saves from your phone will fail too until it resets (midnight Pacific time). Run the same command tomorrow; it carries on where it stopped."],
+  [/Apify 402|not enough usage|credit|usage limit|monthly/i,
+    'Your Apify credit for this month looks used up, so saving anything (imports and phone saves) will fail until it renews. Check apify.com → Billing.'],
+];
+
 // Outcomes that should not be retried on the next run.
 const FINAL = /Already saved|private or deleted|Post unavailable|Found nothing to save/i;
 // Failures that are about one video, so the import carries on.
@@ -158,7 +180,11 @@ async function main() {
   const done = (link) => state[link]?.done || FINAL.test(state[link]?.message ?? '');
   const todo = all.filter((f) => (!f.savedAt || Date.parse(f.savedAt) >= sinceMs) && !done(f.link));
   const batch = todo.slice(0, opts.limit);
-  console.log(`${todo.length} saves to send${opts.since ? ` since ${opts.since}` : ''}; sending ${batch.length}.`);
+  console.log(`${todo.length} saves to send${opts.since ? ` since ${opts.since}` : ''}; sending the newest ${batch.length} this run.`);
+  if (batch.length) console.log(`That's ${estimate(batch)}.`);
+  if (batch.length < todo.length && opts.limit === DEFAULT_LIMIT) {
+    console.log(`The other ${todo.length - batch.length} wait for the next run (or use --limit N, or --all for everything).`);
+  }
   if (opts.dryRun) {
     for (const f of batch) console.log(`  ${f.savedAt?.slice(0, 10) ?? '?'}  ${f.link}${f.note ? `  (${f.note})` : ''}`);
     return;
@@ -197,7 +223,11 @@ async function main() {
 
     if (i < batch.length - 1) await new Promise((r) => setTimeout(r, opts.delay * 1000));
   }
-  if (stopReason) console.log(`Stopped: ${stopReason}`);
+  if (stopReason) {
+    console.log(`Stopped: ${stopReason.split('\n')[0]}`);
+    const why = EXPLAIN.find(([re]) => re.test(stopReason));
+    if (why) console.log(why[1]);
+  }
   console.log(`Done: ${counts.saved} sent, ${counts.duplicate} already saved, ${counts.skipped} skipped as just for fun, ${counts.failed} failed.`);
   if (counts.failed) console.log('Run the same command again to retry the failed ones.');
   if (counts.saved) console.log(`To fold the new ideas into the Guides tab: node scripts/build-guides.mjs --url ${opts.url} --rebuild`);
