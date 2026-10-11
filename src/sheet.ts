@@ -1,6 +1,7 @@
 import { errorMessage, withRetry } from './errors.js';
 import type { CleanupPlan, MentionRow } from './cleanup.js';
 import type { GuideVideo, IdeaRow } from './guides.js';
+import type { PlaceNote } from './notes.js';
 import type { Env, Row } from './types.js';
 
 // Apps Script now and then answers with an error page instead of JSON; a retry usually works.
@@ -35,8 +36,15 @@ export async function findExisting(
   return call(env, { action: 'check', source_url: sourceUrl });
 }
 
-/** Appends rows. Replaces earlier "failed" rows for the same URL. */
-export async function writeRows(env: Env, sourceUrl: string, rows: Row[]): Promise<{ written: number; duplicate?: boolean }> {
+/**
+ * Appends rows. Replaces earlier "failed" rows for the same URL. A repeat place joins its existing row;
+ * `merged_places` lists those whose notes now join several saves'.
+ */
+export async function writeRows(
+  env: Env,
+  sourceUrl: string,
+  rows: Row[],
+): Promise<{ written: number; duplicate?: boolean; merged_places?: PlaceNote[] }> {
   return call(env, { action: 'write', source_url: sourceUrl, rows });
 }
 
@@ -100,4 +108,14 @@ export interface TidyResult {
 /** Merges repeat places, blanks placeholder cells and evens out country names (or, with dryRun, reports it). */
 export async function tidySheet(env: Env, count: number | null, dryRun: boolean): Promise<TidyResult> {
   return call(env, { action: 'tidy', count, dry_run: dryRun });
+}
+
+/** Places rows whose what_to_order joins several notes. */
+export async function readPlaceNotes(env: Env): Promise<PlaceNote[]> {
+  return (await call(env, { action: 'placeNotes' })).places ?? [];
+}
+
+/** Sets what_to_order on rows found by their first link and title. */
+export async function setPlaceNotes(env: Env, updates: PlaceNote[]): Promise<{ updated: number }> {
+  return call(env, { action: 'setPlaceNotes', updates });
 }

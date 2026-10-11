@@ -11,7 +11,7 @@
       "maxDuration": 300
     },
     "api/maintenance.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     }
   }
 }

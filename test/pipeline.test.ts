@@ -15,7 +15,7 @@ function gemini(result: unknown) {
 }
 
 /** Routes fetch calls to fake services and records what the sheet received. */
-function fakeServices(opts: { caption: string; captionParse: unknown; videoParse?: unknown; guideParse?: unknown; guideVideos?: unknown[]; apifyItem?: unknown }) {
+function fakeServices(opts: { caption: string; captionParse: unknown; videoParse?: unknown; guideParse?: unknown; guideVideos?: unknown[]; apifyItem?: unknown; mergedPlaces?: unknown[] }) {
   const sheetWrites: any[] = [];
   const calls: string[] = [];
   const geminiBodies: any[] = [];
@@ -46,7 +46,8 @@ function fakeServices(opts: { caption: string; captionParse: unknown; videoParse
       const body = JSON.parse(String(init?.body));
       sheetWrites.push(body);
       if (body.action === 'guideVideos') return ok({ ok: true, videos: opts.guideVideos ?? [] });
-      return ok({ ok: true, written: body.rows?.length ?? 0 });
+      if (body.action === 'setPlaceNotes') return ok({ ok: true, updated: body.updates.length });
+      return ok({ ok: true, written: body.rows?.length ?? 0, merged_places: opts.mergedPlaces ?? [] });
     }
     throw new Error(`unexpected fetch ${url}`);
   });
@@ -75,6 +76,22 @@ describe('runPipeline', () => {
     const rows = svc.sheetWrites[0].rows;
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ type: 'place', title: 'Veracruz', city: 'Austin', place_id: 'PID', lat: 40, lng: -73, creator: '@chef' });
+  });
+
+  it('rewrites the notes of a place this save joined into one line', async () => {
+    const place = { type: 'place', title: 'Anne Frank House', summary: 's', confidence: 0.9, place: { name: 'Anne Frank House', city: 'Amsterdam', what_to_order: 'book ahead' } };
+    const merged = { source_url: 'u1', title: 'Anne Frank House', what_to_order: 'book 6 weeks ahead; book ahead' };
+    const svc = fakeServices({
+      caption: 'Anne Frank House, Amsterdam',
+      captionParse: { needs_video: false, just_for_fun: false, items: [place] },
+      videoParse: { places: [{ id: 0, notes: 'book 6 weeks ahead' }] }, // the second Gemini call
+      mergedPlaces: [merged],
+    });
+    const result = await runPipeline(env, params);
+    expect(result.message).toBe('Saved place: Anne Frank House');
+    expect(svc.geminiBodies[1].contents[0].parts[0].text).toContain('book 6 weeks ahead; book ahead');
+    expect(svc.sheetWrites.map((w) => w.action)).toEqual(['write', 'setPlaceNotes']);
+    expect(svc.sheetWrites[1].updates).toEqual([{ ...merged, what_to_order: 'book 6 weeks ahead' }]);
   });
 
   it('skips a just-for-fun post without watching the video or writing a row, clearing an earlier failure', async () => {

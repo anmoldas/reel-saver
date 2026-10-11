@@ -76,13 +76,13 @@ one tab per kind of save, newest at the top. every save re-sorts its tab by `sav
 | **Failed** | saves that couldn't be processed | `saved_at, source_url, error, creator` |
 
 - place `category` comes from the **Place types** tab (see below); `specialty` keeps the specific description, e.g. "ceramics and glassware store". `country` lets you filter a trip (Japan, Netherlands…).
-- **each place has one row.** when another post recommends a place you already have, its link and creator are added to that row (one per line), `times_saved` goes up, and anything new it says to order joins `what_to_order`. a place is the same when Google gives it the same place ID, or, without one, the same name in the same city. two branches of a chain stay separate.
+- **each place has one row.** when another post recommends a place you already have, its link and creator are added to that row (one per line), `times_saved` goes up, and Gemini rewrites `what_to_order` as one line covering every post, so the same advice isn't listed three ways. a place is the same when Google gives it the same place ID, or, without one, the same name in the same city. two branches of a chain stay separate.
 - `country` comes from Google's address when the place is found there, so it's spelled the same every time ("USA", "Japan"). `city` is the city, not the neighbourhood (Brooklyn and Flushing are New York City, Shibuya is Tokyo), spelled the way your sheet already spells it.
 - a field the post doesn't say stays empty, never "Not specified".
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
 - **older sheets:** run `sortAllTabs` once to put existing rows newest first.
-- **older sheets:** to merge places saved more than once, clear "Not specified" cells from Places and Recipes and spell countries one way, run `node scripts/tidy-sheet.mjs --url https://YOUR-APP.vercel.app`. it shows what it would change without changing anything; add `--apply` to do exactly that. Places is copied to `Places (backup)` first. don't run it while an import is going.
+- **older sheets:** to merge places saved more than once, clear "Not specified" cells from Places and Recipes and spell countries one way, run `node scripts/tidy-sheet.mjs --url https://YOUR-APP.vercel.app`. it shows what it would change without changing anything; add `--apply` to do exactly that. Places is copied to `Places (backup)` first. then `--notes` does the same for the merged places' `what_to_order`: it previews each one rewritten as one line, and `--notes --apply` writes exactly those. don't run either while an import is going.
 
 notes marked **older sheets** are one-time fixes for sheets made before a feature was added; a new sheet doesn't need them. functions like `sortAllTabs` run from the Apps Script editor: pick the function in the dropdown and click Run.
 

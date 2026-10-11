@@ -76,7 +76,7 @@ function load() {
     PropertiesService: {}, LockService: {}, Logger: { log() {} }, ContentService: {}, DriveApp: {}, UrlFetchApp: {},
   };
   const src = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, tidy_, readFailed_, cityNames_ };`)(...Object.values(globals));
+  return new Function(...Object.keys(globals), `${src}\nreturn { mergeMentions_, detachMentions_, readMentions_, cleanMentions_, append_, applyNewTopics_, guideNames_, assignGuides_, writeGuide_, write_, check_, tidy_, readFailed_, cityNames_, readPlaceNotes_, setPlaceNotes_ };`)(...Object.values(globals));
 }
 
 let gs: {
@@ -89,7 +89,9 @@ let gs: {
   guideNames_: () => string[];
   assignGuides_: (a: object[]) => { assigned: number };
   writeGuide_: (body: object) => { written: number; videos: number };
-  write_: (url: string, rows: object[]) => { written: number; duplicate?: boolean };
+  write_: (url: string, rows: object[]) => { written: number; duplicate?: boolean; merged_places?: object[] };
+  readPlaceNotes_: () => { places: object[] };
+  setPlaceNotes_: (updates: object[]) => { updated: number };
   check_: (url: string) => { exists: boolean; title?: string };
   tidy_: (body: object) => any;
   readFailed_: () => { rows: { source_url: string; error: string }[] };
@@ -344,6 +346,16 @@ describe('places', () => {
     expect([joe[col('country')], joe[col('what_to_order')], joe[col('times_saved')]]).toEqual(['USA', '', 1]);
     const recipes = sheets.Recipes.rows;
     expect(recipes[1][(recipes[0] as string[]).indexOf('time')]).toBe('');
+  });
+
+  it('reports places whose notes now join several saves, and rewrites them by first link and title', () => {
+    expect(gs.write_('u1', [p('Senso-ji', 'u1', { place_id: 'P1', what_to_order: 'omikuji' })]).merged_places).toEqual([]);
+    const second = gs.write_('u2', [p('Sensoji Temple', 'u2', { place_id: 'P1', what_to_order: 'fortune slips' })]);
+    expect(second.merged_places).toEqual([{ source_url: 'u1', title: 'Senso-ji', what_to_order: 'omikuji; fortune slips' }]);
+    expect(gs.readPlaceNotes_().places).toEqual(second.merged_places);
+    expect(gs.setPlaceNotes_([{ source_url: 'u1', title: 'senso-ji', what_to_order: 'omikuji (fortune slips)' }])).toEqual({ ok: true, updated: 1 });
+    expect(titled('Senso-ji')[0][col('what_to_order')]).toBe('omikuji (fortune slips)');
+    expect(gs.setPlaceNotes_([{ source_url: 'u2', title: 'Senso-ji', what_to_order: 'x' }]).updated).toBe(0); // not its first link
   });
 
   it('reads the Failed tab', () => {
