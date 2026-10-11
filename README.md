@@ -6,10 +6,10 @@ tap **Share** on an instagram reel or tiktok, and it lands in your own google sh
 
 ## what you need
 
-- an **iPhone** (it uses the Shortcuts app; Android works with the free HTTP Shortcuts app, see [SETUP.md](SETUP.md))
+- an **iPhone** (it uses the Shortcuts app. Android is possible with the free HTTP Shortcuts app, but there are no step-by-step instructions for it yet)
 - a **google account** for the sheet
 - a mac or windows computer for the one-time setup, about **45 minutes**, mostly making free accounts
-- for the guided setup, [Claude Code](https://claude.com/claude-code), which needs a paid Claude plan. you can also [set it up by hand](#doing-it-by-hand) for free
+- for the guided setup, [Claude Code](https://claude.com/claude-code), which needs a paid Claude plan. without one you can [set it up by hand](#doing-it-by-hand) for free, but that route is for people comfortable with code: it also needs a GitHub account and Node.js
 
 and these accounts, which the setup walks you through one at a time, so you don't need them beforehand:
 
@@ -24,7 +24,7 @@ so it's **$0 to run** for normal use.
 
 ## set it up
 
-open [Claude Code](https://claude.com/claude-code) in an empty folder and say:
+install the [Claude desktop app](https://claude.com/download), sign in, open the **Code** tab and choose a new, empty folder (make one called `save-faves` anywhere, like your Documents). then say:
 
 > Set up Save Faves for me by following https://raw.githubusercontent.com/moneymolz/save-faves/main/SETUP.md
 
@@ -82,10 +82,8 @@ one tab per kind of save, newest at the top. every save re-sorts its tab by `sav
 - a field the post doesn't say stays empty, never "Not specified".
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
-- **older sheets:** run `sortAllTabs` once to put existing rows newest first.
-- **older sheets:** to merge places saved more than once, clear "Not specified" cells from Places and Recipes and spell countries one way, run `node scripts/tidy-sheet.mjs --url https://YOUR-APP.vercel.app`. it shows what it would change without changing anything; add `--apply` to do exactly that. Places is copied to `Places (backup)` first. then `--notes` does the same for the merged places' `what_to_order`: it previews each one rewritten as one line, and `--notes --apply` writes exactly those. don't run either while an import is going.
 
-notes marked **older sheets** are one-time fixes for sheets made before a feature was added; a new sheet doesn't need them. functions like `sortAllTabs` run from the Apps Script editor: pick the function in the dropdown and click Run.
+made your sheet with an older version? [UPGRADING.md](UPGRADING.md) has the one-time fixes. a new sheet doesn't need them.
 
 ### mentions
 
@@ -97,8 +95,6 @@ everything an idea recommends gets one row in **Mentions**: a shopping and to-tr
 - `times_mentioned` counts the saves that recommend it, so something three creators recommend stands out. `from`, `creator` and `source_url` list each of those saves, one per line.
 - names match loosely: case, accents and punctuation don't matter, and "Glaze Drops" by Kérastase matches "Kerastase Glaze Drops". a brand on its own ("Muji") stays separate from its products ("Muji Lip Essence").
 - places don't go here (they're in Places), and neither does anything the creator criticised, a giveaway prize or a credited source.
-- **older sheets:** ideas saved before this tab existed only have the plain `mentioned` list. run `backfillMentions` once to turn those into rows (kind, brand, why and price stay empty for them).
-- **older sheets:** to tidy rows from before grouping and the stricter rules, run `node scripts/clean-mentions.mjs --url https://YOUR-APP.vercel.app`. it asks Gemini to review every row and shows what it would remove, re-kind and merge, without changing anything. add `--apply` to do exactly that; the tab is copied to `Mentions (backup)` first. to only merge duplicates, run `mergeDuplicateMentions`. don't run either while an import is going.
 
 ### guides
 
@@ -108,8 +104,7 @@ every idea gets a `guide`: the broad subject it belongs to. trips go by country 
 - once a guide has two videos it gets a row in **Guides**: a one-line summary and every video's takeaways combined, with repeats merged. big guides are split into short sections (Japan → shopping, drugstore & konbini, Kyoto…).
 - each new video rewrites its guide from all its videos. `from`, `creator` and `source_url` list them, newest first. `done` and `notes` are yours and are kept.
 - **to move an idea**, change its `guide` cell, then rebuild (below).
-- **grouping older ideas** (from before guides existed): `node scripts/build-guides.mjs --url https://YOUR-APP.vercel.app` asks Gemini to pick a guide for every idea that has none and prints the groups, without changing anything. it saves them in `.guides-plan.json`: change any `guide` there to rename or move one. add `--apply` to write them and build the Guides tab.
-- **rebuilding**: `--rebuild` instead rewrites every guide from the Ideas tab: after an import (imports skip guides to save Gemini calls), or after you've changed `guide` cells by hand.
+- **rebuilding**: `node scripts/build-guides.mjs --url https://YOUR-APP.vercel.app --rebuild` rewrites every guide from the Ideas tab: after an import (imports skip guides to save Gemini calls), or after you've changed `guide` cells by hand.
 
 ### topics
 
@@ -126,15 +121,9 @@ the **Topics** tab is the list of topics your ideas get sorted into. Gemini must
 
 the **Place types** tab lists the place categories: restaurant, cafe, bar, bakery & dessert, home & ceramics, clothing, beauty, books & stationery, market, museum & gallery, sight, activity, stay. Gemini must pick one or "other", so a pottery shop, a ceramics store and a home decor shop all land in **home & ceramics**, which makes `category` easy to filter on. add a row to add a type.
 
-**older sheets:** places saved before this list existed have free-text categories. run `recategorizePlaces` once: it moves the old wording to `specialty`, guesses the type from keywords, and logs any it set to "other" so you can fix those by hand.
-
-### moving from the old single tab
-
-if your sheet has the older `Saves` tab, paste the new `Code.gs`, pick `migrateSaves` in the function dropdown and click Run once. rows move to the new tabs and the old tab is kept as `Saves (old)`. then deploy a new version (Deploy → Manage deployments → edit → Version: New version) so the web app uses the new code.
-
 ## importing what you've already saved
 
-bring in your past TikTok favorites and Instagram saved posts. three things to know first:
+bring in your past TikTok favorites and Instagram saved posts. a few things to know first:
 
 - **it runs on your computer**, not online. your computer has to stay on, awake and connected the whole time. if it sleeps or you close the window, it just stops; run the same command again and it picks up where it left off.
 - **it's slow on purpose.** it sends one post at a time and waits for each to finish, so figure on 30 seconds to a minute per post: 100 posts takes one to two hours, 500 takes five to nine. plug in your laptop.
@@ -144,8 +133,10 @@ bring in your past TikTok favorites and Instagram saved posts. three things to k
 
 ask each app for your data in **JSON** format:
 
-- **tiktok**: Settings and privacy → Account → Download your data → JSON. you get `user_data_tiktok.json`.
-- **instagram**: Accounts Center → Your information and permissions → Download your information → Some of your information → **Saved** only → Download to device, Format **JSON**, Date range **All time**. unzip it; that's the folder you pass.
+- **tiktok**: Profile → ☰ → Settings and privacy → Account → Download your data. pick **JSON** and **All data**, tap **Request data**, and download the zip from the **Download data** tab when it's ready. unzip it; inside is `user_data_tiktok.json`.
+- **instagram**: Settings → Accounts Center → Your information and permissions → Download your information → Download or transfer information → your account → **Some of your information** → tick only **Saved** → Download to device, Date range **All time**, Format **JSON** → Create files. instagram emails you when it's ready. unzip it; that's the folder you pass.
+
+either can take from a few minutes to a day.
 
 see how many there are first (this sends nothing and costs nothing):
 
@@ -179,7 +170,7 @@ the shortcut waits up to 20 seconds. if the save finishes in that time you get "
 
 ## doing it by hand
 
-the same steps Claude Code follows. you'll also need to make up one long random string as your `SECRET` (`node scripts/setup.mjs init` makes one for you in `.env.local`).
+the same steps Claude Code follows, for people comfortable with a terminal. you'll need a GitHub account (to copy this repo to Vercel) or Node.js 20+ (to deploy from your computer), and to make up one long random string as your `SECRET` (`node scripts/setup.mjs init` makes one for you in `.env.local`).
 
 ### 1. accounts and keys
 
@@ -219,7 +210,17 @@ then a real one (drop `"stub":true` and use a real reel or tiktok link). logs ar
 
 ### 4. iOS shortcut
 
-1. Shortcuts app → + → name it **Save to Sheet**.
+on your iPhone, open **[this link](https://www.icloud.com/shortcuts/04142f8ea71940b98be0b106da7fd91c)** and tap **Set Up Shortcut**. it asks two things:
+
+- **your app address**: `https://<project>.vercel.app/api/share`
+- **your secret**: your `SECRET`
+
+to change either later, open the shortcut in the Shortcuts app: the address is in **Get Contents of URL**, the secret in the **Text** action above it.
+
+<details>
+<summary>or build it yourself</summary>
+
+1. Shortcuts app → + → name it **Save Faves**.
 2. tap the ⓘ (details) → turn on **Show in Share Sheet**. under the share sheet types, keep only **URLs** and **Text**, and set **If there's no input** to **Get Clipboard**.
 3. add **Get Contents of URL**:
    - URL: `https://<project>.vercel.app/api/share`
@@ -230,7 +231,9 @@ then a real one (drop `"stub":true` and use a real reel or tiktok link). logs ar
 4. add **Get Dictionary Value**: get value for `message` in *Contents of URL*.
 5. add **Show Notification** with the *Dictionary Value*.
 
-in instagram or tiktok: Share → Save to Sheet (in tiktok it's under Share → More, or copy link first). the first time, iOS asks to allow the connection to vercel.app. choose Always Allow.
+</details>
+
+in instagram or tiktok: Share → Save Faves (in tiktok it's under Share → More, or copy link first). the first time, iOS asks to allow the connection to vercel.app. choose Always Allow.
 
 ## changing things
 

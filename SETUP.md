@@ -1,6 +1,6 @@
 # Save Faves: setup guide for Claude Code
 
-> **If you're a person reading this:** you don't need to follow these steps yourself. Open Claude Code in an empty folder and say:
+> **If you're a person reading this:** you don't need to follow these steps yourself. Install the [Claude desktop app](https://claude.com/download), open the **Code** tab, choose a new empty folder, and say:
 >
 > *Set up Save Faves for me by following https://raw.githubusercontent.com/moneymolz/save-faves/main/SETUP.md*
 >
@@ -101,19 +101,20 @@ If yes:
 
 ### Step 7: The iPhone Shortcut
 
-This is what makes it one tap from Instagram or TikTok. It's easiest to build on a Mac in the **Shortcuts** app, which syncs to the iPhone through iCloud. It also works directly on the iPhone. Walk them through it:
+This is what makes it one tap from Instagram or TikTok. There's a ready-made Shortcut that asks for their app address and secret when they add it.
 
-1. Shortcuts → **+** → name it **Save to Sheet**.
-2. Open the **ⓘ** (details) → turn on **Show in Share Sheet**. In the **Receive** block at the top, set the input types to just **URLs** and **Text**, and set **If there's no input** to **Get Clipboard**.
-3. Add the **Get Contents of URL** action:
-   - The URL is their app address followed by `/api/share`, e.g. `https://<their-app>.vercel.app/api/share`. If Shortcuts filled the URL slot with "Shortcut Input", clear it first.
-   - Open the action's options (the **›** arrow, or **Show More** on Mac): **Method: POST**, **Request Body: JSON**.
-   - **Add new field → Text**: key `url`, value = the **Shortcut Input** variable.
-   - **Add new field → Text**: key `secret`, value = their secret. Run `node scripts/setup.mjs copy SECRET` so they can paste it. If they're building on the iPhone and own a Mac with the same Apple ID, Universal Clipboard carries the copy across; otherwise they paste it into a note to themselves first.
-4. Add **Get Dictionary Value**: get **Value** for key `message` in **Contents of URL**.
-5. Add **Show Notification** with the **Dictionary Value**.
+1. Run `node scripts/setup.mjs copy SECRET` so their secret is on the clipboard.
+2. Have them open https://www.icloud.com/shortcuts/04142f8ea71940b98be0b106da7fd91c and click **Set Up Shortcut**. It's easiest on a Mac (it opens in the Shortcuts app and syncs to the iPhone through iCloud). On Windows they open the link on the iPhone instead; to get the secret there, they paste it into a note or an email to themselves first.
+3. It asks two questions:
+   - **Your app address**: their app address followed by `/api/share`, e.g. `https://<their-app>.vercel.app/api/share`. Tell them the exact text to type.
+   - **Your secret**: paste. If they're on the iPhone and own a Mac with the same Apple ID, Universal Clipboard carries the copy across.
+4. Click **Add Shortcut**. It's called **Save Faves**.
 
-Test it on the Mac: copy a reel link, then press ▶ in the Shortcut. On the iPhone, in Instagram tap **Share (paper plane) → Share to… / More → Save to Sheet**; in TikTok, **Share → More → Save to Sheet**. The first time, iOS asks to allow the connection, so tap **Always Allow**. Tip: in the share sheet, **Edit Actions** → add Save to Sheet to Favorites.
+If they typed something wrong, it's fixable in the Shortcuts app: the address is in the **Get Contents of URL** action and the secret in the **Text** action above it.
+
+If the link doesn't work for them, build it by hand: a Shortcut named **Save Faves** with **Show in Share Sheet** on, receiving **URLs** and **Text** (if there's no input: **Get Clipboard**); a **Get Contents of URL** action posting JSON `{ url: Shortcut Input, secret: <their secret> }` to the app address with `/api/share`; **Get Dictionary Value** for `message`; and **Show Notification** with that value.
+
+Test it on the Mac: copy a reel link, then press ▶ in the Shortcut. On the iPhone, in Instagram tap **Share (paper plane) → Share to… / More → Save Faves**; in TikTok, **Share → More → Save Faves**. The first time, iOS asks to allow the connection, so tap **Always Allow**. Tip: in the share sheet, **Edit Actions** → add Save Faves to Favorites.
 
 Android doesn't have Shortcuts. An Android user can get the same result with the free **HTTP Shortcuts** app, sending the same POST and JSON body.
 
@@ -163,7 +164,7 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 |---|---|---|
 | `Sheet endpoint returned non-JSON (401)` | Web app access isn't "Anyone", or `SHEET_URL` isn't the `/exec` URL | Deploy → Manage deployments → pencil → Who has access: **Anyone** → New version → Deploy. Check `SHEET_URL`. |
 | `Sheet: Wrong secret` | Script property `SECRET` doesn't match the settings file | `node scripts/setup.mjs copy SECRET`, then re-paste it in Project Settings → Script properties. |
-| `Wrong secret` (from the app itself) | The Shortcut's secret field doesn't match | Re-copy the secret into the Shortcut's `secret` field. |
+| `Wrong secret` (from the app itself) | The Shortcut's secret doesn't match | `node scripts/setup.mjs copy SECRET`, then paste it into the Shortcut's **Text** action (or its `secret` field, if they built it by hand). |
 | `Missing environment variables: …` | Keys not sent to Vercel, or not redeployed after sending | `node scripts/setup.mjs push`, then `npx vercel deploy --prod --yes`. Vercel only picks up key changes on a new deploy. |
 | Every save fails with `non-JSON (404)` right after updating the script | A **New deployment** was made (or the old one archived), which gives the web app a new address | Keep using **Manage deployments → pencil → New version** on the original deployment. If the old one is already archived, put the new `/exec` address in `SHEET_URL` (settings file, then `node scripts/setup.mjs push`) and redeploy with `npx vercel deploy --prod --yes`. |
 | Changes to the settings file have no effect | Same as above | Push and redeploy. |
@@ -175,7 +176,7 @@ To see what happened on a save, run `npx vercel logs <their-app-url>`. Every ste
 | Failed: `Found nothing to save in this post` | Gemini couldn't find a place, recipe or tip, but wasn't sure there was nothing worth keeping | Usually nothing to fix. Delete the Failed row if they don't care about it. |
 | Failed: `Timed out after 240s` or `Gemini 503` | A slow scrape or long video, or Gemini was busy | Share again, or run `scripts/retry-failed.mjs` to retry all of these at once. |
 | A place has no address or coordinates | No `PLACES_API_KEY` (optional), or Places couldn't find it | Expected without Places. Otherwise the Maps link still works. |
-| Shortcut shows nothing or an error page | Wrong URL in the Shortcut | It must be the app address followed by `/api/share`. |
+| Shortcut shows nothing or an error page | Wrong URL in the Shortcut | In **Get Contents of URL**, it must be the app address followed by `/api/share`. |
 | A test reaches a Vercel login page | Deployment Protection is on for production | Project → Settings → Deployment Protection → leave production unprotected. |
 
 ## Updating later
