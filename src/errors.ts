@@ -1,3 +1,5 @@
+// Small helpers for handling failures: telling lasting ones from passing ones, and retrying the passing ones.
+
 /** A failure that retrying will not fix (private post, deleted post, bad link). */
 export class PermanentError extends Error {
   constructor(message: string) {
@@ -24,6 +26,7 @@ export async function withRetry<T>(attempt: () => Promise<T>, isTemporary: (err:
   }
 }
 
+/** The readable message from anything that was thrown. */
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);

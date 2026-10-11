@@ -1,3 +1,10 @@
+// The heart of the app: what happens to one shared post, start to finish.
+//   1. Fetch:  Apify downloads the post (caption, creator, video, photos).        src/apify.ts
+//   2. Read:   Gemini reads the caption, and watches the video only if needed.    src/gemini.ts
+//   3. Places: Google Places adds the address and map pin (optional).             src/places.ts
+//   4. Save:   the results become rows in your Google Sheet.                      src/rows.ts, src/sheet.ts
+//   5. Guides: new ideas are folded into their guide.                             src/guides.ts
+
 import { getItems, normalizeItem, startRun, waitForRun } from './apify.js';
 import { errorMessage } from './errors.js';
 import { deleteVideo, downloadImages, needsVideo, parseCaption, parseMedia, uploadVideo, type Media } from './gemini.js';
@@ -8,7 +15,7 @@ import { failedRow, itemRow, mentionRows, summarize } from './rows.js';
 import { setPlaceNotes, writeRows } from './sheet.js';
 import type { Env, ParseResult, PipelineParams, PipelineResult, PlaceMatch, Post } from './types.js';
 
-// Vercel Hobby stops functions at 300s. Give up early enough to still write the failure row.
+// Vercel's free plan stops a request after 300 seconds. Give up early enough to still write the Failed row.
 const DEADLINE_MS = 240_000;
 // Updating a guide is skipped when less time than this is left; the next save to that guide catches up.
 const GUIDE_TIME_MS = 60_000;
@@ -16,8 +23,8 @@ const GUIDE_TIME_MS = 60_000;
 const log = (url: string, msg: string) => console.log(`[save-faves] ${url} ${msg}`);
 
 /**
- * Fetch → parse → enrich → store. Never throws: any failure becomes a "failed" row
- * so nothing shared is silently lost.
+ * Runs the steps above with a time limit. Never throws: any failure becomes a row in the Failed tab,
+ * so nothing you share is silently lost.
  */
 export async function runPipeline(env: Env, params: PipelineParams, deadlineMs = DEADLINE_MS): Promise<PipelineResult> {
   const state = { abandoned: false, deadlineAt: Date.now() + deadlineMs };
@@ -90,7 +97,7 @@ async function runSteps(
   onPost(post);
   log(url, `fetched @${post.creator}, caption ${post.caption.length} chars, video ${post.videoUrl ? 'yes' : 'no'}`);
 
-  // 2. Parse: caption first, then the video and/or images only when the caption is not enough
+  // 2. Read: caption first (cheap and fast), then the video and/or images only when the caption is not enough
   let result: ParseResult | null = post.caption ? await parseCaption(env, lists, post) : null;
   const reason = result ? needsVideo(result, env.CONFIDENCE_THRESHOLD) : 'no caption';
   if (reason && (post.videoUrl || post.imageUrls.length)) {
@@ -114,7 +121,7 @@ async function runSteps(
   }
   if (!result?.items.length) throw new Error('Found nothing to save in this post');
 
-  // 3. Enrich places (a lookup failure only loses the address, not the row)
+  // 3. Look up each place's address (a lookup failure only loses the address, not the row)
   const matches: (PlaceMatch | null)[] = await Promise.all(
     result.items.map(async (item) => {
       if (!item.place?.name || !env.PLACES_API_KEY) return null;
@@ -127,7 +134,7 @@ async function runSteps(
     }),
   );
 
-  // 4. Store
+  // 4. Save to the sheet. Each idea also gets one Mentions row per product, app or brand it names.
   if (state.abandoned) return { ok: false, message: 'abandoned' };
   const base = { savedAt, sourceUrl: url, post };
   const rows = result.items.flatMap((item, i) => [
@@ -137,7 +144,8 @@ async function runSteps(
   const written = await writeRows(env, url, rows);
   if (written.duplicate) return { ok: true, message: 'Already saved' };
 
-  // A place saved before now has two posts' notes on what to order; say them once. Only logged on failure.
+  // A place you'd already saved now has two posts' notes on what to order. Gemini rewrites them so each
+  // tip appears once. If that fails, the save still counts; the error only goes to the logs.
   if (written.merged_places?.length && !state.abandoned) {
     try {
       const combined = await combinePlaceNotes(env, written.merged_places);

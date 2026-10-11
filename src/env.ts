@@ -1,3 +1,6 @@
+// Reads your keys and settings. On Vercel they are the project's Environment Variables; .env.example
+// lists them all. Optional ones fall back to the defaults below.
+
 import type { Env } from './types.js';
 
 // PLACES_API_KEY is optional: without it, places still save with a Maps search link but no address or coordinates.

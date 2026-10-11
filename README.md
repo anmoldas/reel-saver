@@ -243,6 +243,25 @@ all optional, set as Vercel env vars:
 - `INSTAGRAM_ACTOR` / `TIKTOK_ACTOR`: Apify actor IDs. defaults `apify/instagram-scraper`, `clockworks/tiktok-scraper`. if one starts failing, swap it here. a different actor may name its output fields differently, see `normalizeItem` in `src/apify.ts`
 - `CONFIDENCE_THRESHOLD`, `SYNC_WAIT_SECONDS`
 
+## how the code fits together
+
+curious how it works, or want to change something? every file starts with a short note on what it does. the path a shared link takes:
+
+1. **your iPhone Shortcut** sends the link and your secret to the app on Vercel.
+2. **`api/share.ts`** checks the secret, tidies the link (`src/urls.ts`) and asks the sheet whether it's already saved.
+3. **`src/pipeline.ts`** runs the save: Apify fetches the post (`src/apify.ts`), Gemini reads it (`src/gemini.ts`), Google Places finds the address (`src/places.ts`), and the results become rows (`src/rows.ts`).
+4. **`apps-script/Code.gs`**, which lives inside your google sheet, writes those rows to the right tabs.
+
+| to change… | look in |
+|---|---|
+| what Gemini saves and how it decides | `instructions()` in `src/gemini.ts` |
+| the starting topics and place types | the **Topics** and **Place types** tabs in your sheet |
+| how guides are named | `GUIDE_NAMING` in `src/topics.ts` |
+| a tab's columns | `TABS` at the top of `apps-script/Code.gs` |
+| the notification text | `summarize()` in `src/rows.ts` |
+
+the `scripts/` folder holds the tools you run from your computer: `setup.mjs`, `import-saves.mjs`, `retry-failed.mjs` and `build-guides.mjs`. each one explains itself at the top.
+
 ## develop
 
 ```sh

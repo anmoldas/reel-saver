@@ -1,3 +1,12 @@
+// Step 2: read the post. Google's Gemini AI reads the caption (and, when needed, watches the video or
+// looks at the photos) and answers in a fixed JSON shape: which places, recipes or ideas the post holds.
+//
+// The file has four parts:
+//   - the instructions and answer format Gemini is given (start here to change what gets saved)
+//   - sending a request to Gemini
+//   - deciding when the caption isn't enough and the video is needed
+//   - cleaning up Gemini's answer, and uploading videos
+
 import { DEFAULT_PLACE_TYPES, GUIDE_NAMING, MENTION_KINDS, OTHER, OTHER_PLACE, matchGuide, type Lists } from './topics.js';
 import { errorMessage, withRetry } from './errors.js';
 import { countryName } from './places.js';
@@ -8,7 +17,10 @@ const BASE = 'https://generativelanguage.googleapis.com';
 const STR = { type: 'STRING' };
 const STR_LIST = { type: 'ARRAY', items: STR };
 
-/** Gemini's structured-output schema (OpenAPI subset). The lists come from the sheet, so it is built per call. */
+/**
+ * The exact shape Gemini must answer in, so its reply can be read reliably. Built fresh on every save
+ * because the topic and place-type choices come from your sheet.
+ */
 export function responseSchema({ topics, placeTypes }: Lists) {
   return {
     type: 'OBJECT',
@@ -78,6 +90,7 @@ export function responseSchema({ topics, placeTypes }: Lists) {
   };
 }
 
+/** The instructions Gemini follows for every post. Edit these to change what gets saved and how. */
 export function instructions({ topics, placeTypes, guides, cities }: Lists): string {
   return `You turn a saved social media post into structured notes.
 
@@ -122,6 +135,8 @@ Rules:
 - Also set "just_for_fun" to true, with no items, when the post has nothing worth keeping even though it isn't a joke: the creator only asks viewers for suggestions ("what rain boots should I get?") without giving their own; a giveaway or contest; a promo or interview that only plugs someone's own book, show or product; or news that will soon be out of date (a policy update, a sale ending this week). If such a post also gives real recommendations or tips of its own, return those instead.
 - Write in English.`;
 }
+
+// ---- sending a request to Gemini ----
 
 function generateUrl(model: string): string {
   return `${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -186,7 +201,7 @@ export interface Media {
 
 export interface InlineImage {
   mimeType: string;
-  data: string; // base64
+  data: string; // the image's bytes, written as text (base64) so they fit in the request
 }
 
 /** Reads the post with its video and/or images. */
@@ -235,6 +250,8 @@ export async function downloadImages(env: Env, urls: string[]): Promise<InlineIm
   return out;
 }
 
+// ---- when the caption isn't enough ----
+
 /** Why the caption-only result is not good enough, or null if it is. */
 export function needsVideo(result: ParseResult, threshold: number): string | null {
   if (result.needs_video) return 'model asked for the video';
@@ -252,7 +269,9 @@ export function needsVideo(result: ParseResult, threshold: number): string | nul
   return null;
 }
 
-// ---- input clean-up: never trust the model's JSON shape blindly ----
+// ---- cleaning up Gemini's answer ----
+// Gemini usually follows the format, but not always. Everything below checks each field and fills in
+// safe values, so one odd answer can't break the sheet.
 
 const TYPES: ItemType[] = ['recipe', 'place', 'idea'];
 
@@ -276,7 +295,7 @@ function pick(value: unknown, options: string[], fallback: string): string {
 function mentions(v: unknown): Mention[] {
   if (!Array.isArray(v)) return [];
   return v.flatMap((m: any): Mention[] => {
-    // Older or looser output may give plain names.
+    // Gemini sometimes gives just a name instead of the full details.
     if (typeof m === 'string') return m.trim() ? [{ name: m.trim(), kind: 'product', brand: '', why: '', price: '' }] : [];
     const name = s(m?.name);
     if (!name) return [];
@@ -284,6 +303,7 @@ function mentions(v: unknown): Mention[] {
   });
 }
 
+/** Gemini's raw answer, checked and cleaned. Items without a title are dropped. */
 export function normalizeParse(
   raw: any,
   { topics, placeTypes, guides }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE], guides: [], cities: [] },
@@ -334,7 +354,8 @@ export function normalizeParse(
   return { items, needs_video: raw?.needs_video === true, just_for_fun: raw?.just_for_fun === true && items.length === 0 };
 }
 
-// ---- video upload (Gemini Files API) ----
+// ---- uploading a video for Gemini to watch ----
+// Videos are too big to send inside a request, so they are uploaded to Gemini first and then referred to.
 
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 

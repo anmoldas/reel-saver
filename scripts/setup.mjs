@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Setup helper used by SETUP.md. Never prints secret values.
+// Setup helper used by SETUP.md (and handy if you set things up by hand). It keeps your keys in
+// .env.local on your computer and never prints them.
 //
 //   node scripts/setup.mjs init            create .env.local with a generated SECRET
 //   node scripts/setup.mjs check           say which keys are set and whether each one works

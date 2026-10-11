@@ -1,3 +1,6 @@
+// Used only by scripts/build-guides.mjs, to group ideas you saved earlier into guides and rebuild the
+// Guides tab. Everyday saves don't need it: each new idea updates its guide as it's saved.
+
 import { getEnv } from '../src/env.js';
 import { errorMessage } from '../src/errors.js';
 import { groupIdeas, refreshGuide, type IdeaRow } from '../src/guides.js';
@@ -21,7 +24,7 @@ function counts(ideas: IdeaRow[]): { guide: string; videos: number }[] {
 }
 
 /**
- * Groups ideas into guides and builds the Guides tab, driven by scripts/build-guides.mjs.
+ * What the script can ask for (every request includes your secret):
  *   POST { secret, action: 'preview' }              → a guide for every idea without one; changes nothing
  *   POST { secret, action: 'assign', assignments }  → writes those guide names to the Ideas tab
  *   POST { secret, action: 'list' }                 → every guide with its number of videos

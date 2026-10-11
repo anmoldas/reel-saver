@@ -1,13 +1,23 @@
 /**
- * Save Faves: Sheet write endpoint.
+ * Save Faves: the part that lives inside your Google Sheet.
  *
- * Setup: Extensions > Apps Script in your Sheet, paste this file, then
- * Project Settings > Script properties > add SECRET (same value as the Vercel SECRET).
- * Deploy > New deployment > Web app, execute as Me, access Anyone.
+ * The app on Vercel can't edit your sheet directly, so this script does it. Published as a web app,
+ * it gets its own address (your SHEET_URL), and the app sends it requests like "is this post saved
+ * already?" or "write these rows". It only answers requests that include your SECRET.
  *
- * Rows land in one tab per type: Places, Recipes, Ideas, and Failed for errors.
- * Idea topics come from the Topics tab: add a row there to add a topic.
- * Ideas on the same subject share a guide name; the Guides tab has one combined row per guide.
+ * Setup:
+ *   1. In your sheet: Extensions > Apps Script. Replace what's there with this whole file.
+ *   2. Project Settings (gear icon) > Script properties > add SECRET (the same value as in Vercel).
+ *   3. Deploy > New deployment > Web app. Execute as "Me", Who has access "Anyone".
+ *
+ * What ends up in the sheet:
+ *   Places, Recipes, Ideas  one tab per kind of save, newest first
+ *   Mentions                products, apps and brands the posts recommend, one row each
+ *   Guides                  ideas on the same subject combined into one row
+ *   Failed                  saves that didn't work, with the reason
+ *   Topics, Place types     the choices Gemini picks from: add a row to add one
+ *
+ * You can change column order or add your own columns; the script finds columns by their header name.
  */
 
 const TABS = {
@@ -56,10 +66,15 @@ const THUMBNAIL_FOLDER = 'Save Faves thumbnails';
 // Bump when this file changes, so a check of the web app shows which code is deployed.
 const SCRIPT_VERSION = 8;
 
+/** Opening SHEET_URL in a browser shows this, which is how the setup checks the web app is live. */
 function doGet() {
   return json_({ ok: true, service: 'save-faves sheet', version: SCRIPT_VERSION });
 }
 
+/**
+ * Every request from the app arrives here: { secret, action, ... }. The lock makes requests take turns,
+ * so two saves at once can't write over each other.
+ */
 function doPost(e) {
   let body;
   try {
@@ -290,6 +305,7 @@ function readFailed_() {
   };
 }
 
+/** Adds new rows to a tab, with a checkbox in "done" (and a dropdown in Mentions' "status"), then re-sorts. */
 function append_(type, rows) {
   if (!rows.length) return 0;
   const sheet = sheetFor_(type);
@@ -522,6 +538,9 @@ function writeGuide_(body) {
   return { ok: true, written: 1, videos: videos.length };
 }
 
+// ---- small helpers used throughout ----
+
+/** A row's cells as { column name: value }. */
 function rowObject_(header, values) {
   const out = {};
   header.forEach(function (c, i) { out[c] = values[i]; });
@@ -534,6 +553,7 @@ function deleteRowsFor_(sheet, sourceUrl) {
     .forEach(function (n) { sheet.deleteRow(n); });
 }
 
+/** A value ready to put in a cell: dates as dates, "done" as a checkbox, nothing as blank. */
 function cell_(col, value) {
   if (col === 'done') return value === true;
   if (value === undefined || value === null) return '';
@@ -553,6 +573,7 @@ function savedRows_(sourceUrl) {
   return out;
 }
 
+/** The row numbers (and titles) in one tab that came from this post. */
 function rowsIn_(sheet, sourceUrl) {
   const last = sheet.getLastRow();
   if (last < 2 || !sourceUrl) return [];
@@ -569,6 +590,7 @@ function rowsIn_(sheet, sourceUrl) {
   return out;
 }
 
+/** The tab for this type of row, made with its header row the first time it's needed. */
 function sheetFor_(type) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const name = TABS[type].name;
@@ -628,6 +650,7 @@ function thumbnailFolder_() {
   return current.hasNext() ? current.next() : DriveApp.createFolder(THUMBNAIL_FOLDER);
 }
 
+/** Copies a post's thumbnail to your Drive and returns a link to the copy (or the original if that fails). */
 function saveThumbnail_(url) {
   try {
     const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
@@ -641,6 +664,7 @@ function saveThumbnail_(url) {
   }
 }
 
+/** Sends an answer back to the app as JSON. */
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }

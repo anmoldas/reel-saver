@@ -1,3 +1,6 @@
+// Step 3 (optional): look up each place on Google Maps for its exact address, map pin and link.
+// Needs PLACES_API_KEY. Without it, places still get a Maps search link.
+
 import type { Env, PlaceMatch } from './types.js';
 
 // Only these fields are requested. Field choice sets the Places price tier; all of these are in the
@@ -36,12 +39,13 @@ export function cityAndCountry(parts: AddressComponent[] | undefined): { city: s
   return { city, country: countryName(country) };
 }
 
+/** A Google Maps link for the place: an exact pin when the place ID is known, else a search. */
 export function mapsUrl(name: string, city: string, placeId = ''): string {
   const q = encodeURIComponent([name, city].filter(Boolean).join(', '));
   return `https://www.google.com/maps/search/?api=1&query=${q}${placeId ? `&query_place_id=${placeId}` : ''}`;
 }
 
-/** Text Search for "name, city". Returns null when there is no match. */
+/** Searches Google Maps for "name, city" and takes the top result. Returns null when there is no match. */
 export async function findPlace(env: Env, name: string, city: string): Promise<PlaceMatch | null> {
   const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
