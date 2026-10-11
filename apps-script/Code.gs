@@ -54,7 +54,7 @@ const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'h
 const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
 // Bump when this file changes, so a check of the web app shows which code is deployed.
-const SCRIPT_VERSION = 5;
+const SCRIPT_VERSION = 6;
 
 function doGet() {
   return json_({ ok: true, service: 'save-faves sheet', version: SCRIPT_VERSION });
@@ -83,6 +83,8 @@ function doPost(e) {
     if (body.action === 'writeGuide') return json_(writeGuide_(body));
     if (body.action === 'failed') return json_(readFailed_());
     if (body.action === 'tidy') return json_(tidy_(body));
+    if (body.action === 'placeNotes') return json_(readPlaceNotes_());
+    if (body.action === 'setPlaceNotes') return json_(setPlaceNotes_(body.updates || []));
     return json_({ ok: false, error: 'Unknown action: ' + body.action });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -129,12 +131,14 @@ function write_(sourceUrl, rows) {
     (byType[type] = byType[type] || []).push(row);
   });
   let written = 0;
+  const mergedPlaces = [];
   Object.keys(byType).forEach(function (type) {
     if (type === 'mention') written += mergeMentions_(byType[type]);
-    else if (type === 'place') written += mergePlaces_(byType[type], withThumbnail);
+    else if (type === 'place') written += mergePlaces_(byType[type], withThumbnail, mergedPlaces);
     else written += append_(type, CONTENT_TYPES.indexOf(type) !== -1 ? byType[type].map(withThumbnail) : byType[type]);
   });
-  return { ok: true, written: written };
+  // Places whose what_to_order now joins several saves' notes; the app rewrites those into one line.
+  return { ok: true, written: written, merged_places: mergedPlaces };
 }
 
 // ---- Places: one row per place, listing every save that recommends it ----
@@ -180,8 +184,16 @@ function addPlaceSave_(target, row) {
   PLACE_FILL.forEach(function (c) { if ((target[c] === '' || target[c] === undefined || target[c] === null) && row[c]) target[c] = row[c]; });
 }
 
-/** Adds each place to the row for the same place, or appends a new row. Returns rows touched. */
-function mergePlaces_(rows, prepareNew) {
+/** The row's first link and title, which setPlaceNotes_ finds it by, with its notes. */
+function placeNote_(row) {
+  return { source_url: lines_(row.source_url)[0] || '', title: String(row.title || ''), what_to_order: String(row.what_to_order || '') };
+}
+
+/**
+ * Adds each place to the row for the same place, or appends a new row. Returns rows touched.
+ * Rows whose what_to_order now has several saves' notes are added to `mergedNotes`.
+ */
+function mergePlaces_(rows, prepareNew, mergedNotes) {
   const sheet = sheetFor_('place');
   const header = header_(sheet, TABS.place.columns);
   const last = sheet.getLastRow();
@@ -201,6 +213,12 @@ function mergePlaces_(rows, prepareNew) {
     }
     const target = i < data.length ? rowObject_(header, data[i]) : fresh[i - data.length];
     addPlaceSave_(target, row);
+    if (mergedNotes && String(target.what_to_order || '').indexOf(';') !== -1) {
+      const note = placeNote_(target);
+      const at = mergedNotes.map(function (n) { return n.source_url + '\n' + n.title; }).indexOf(note.source_url + '\n' + note.title);
+      if (at === -1) mergedNotes.push(note);
+      else mergedNotes[at] = note;
+    }
     if (i < data.length) {
       data[i] = header.map(function (c) { return target[c]; });
       keys[i] = placeKey_(target);
@@ -336,6 +354,38 @@ function tidy_(body) {
       .setValues(recipeRows.map(function (r) { return recipeHeader.map(function (c) { return cell_(c, r[c]); }); }));
   }
   return result;
+}
+
+/** Places whose what_to_order joins several notes ("a; b"), for rewriting into one line. */
+function readPlaceNotes_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.place.name);
+  if (!sheet || sheet.getLastRow() < 2) return { ok: true, places: [] };
+  const header = header_(sheet, TABS.place.columns);
+  return {
+    ok: true,
+    places: sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues()
+      .map(function (v) { return placeNote_(rowObject_(header, v)); })
+      .filter(function (n) { return n.what_to_order.indexOf(';') !== -1; }),
+  };
+}
+
+/** Sets what_to_order on the rows with this first link and title: [{ source_url, title, what_to_order }]. */
+function setPlaceNotes_(updates) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.place.name);
+  if (!sheet || sheet.getLastRow() < 2) return { ok: true, updated: 0 };
+  const header = header_(sheet, TABS.place.columns);
+  const col = header.indexOf('what_to_order');
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+  let updated = 0;
+  data.forEach(function (v, i) {
+    const note = placeNote_(rowObject_(header, v));
+    updates.forEach(function (u) {
+      if (!u || !u.what_to_order || u.source_url !== note.source_url || norm_(u.title) !== norm_(note.title)) return;
+      sheet.getRange(i + 2, col + 1).setValue(cell_('what_to_order', String(u.what_to_order)));
+      updated++;
+    });
+  });
+  return { ok: true, updated: updated };
 }
 
 /** Every Failed row, for scripts/retry-failed.mjs. */

@@ -7,3 +7,4 @@ node_modules
 .mentions-cleanup-plan.json
 .guides-plan.json
 .tidy-plan.json
+.notes-plan.json

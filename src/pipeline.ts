@@ -2,9 +2,10 @@ import { getItems, normalizeItem, startRun, waitForRun } from './apify.js';
 import { errorMessage } from './errors.js';
 import { deleteVideo, downloadImages, needsVideo, parseCaption, parseMedia, uploadVideo, type Media } from './gemini.js';
 import { refreshGuide } from './guides.js';
+import { combinePlaceNotes } from './notes.js';
 import { findPlace } from './places.js';
 import { failedRow, itemRow, mentionRows, summarize } from './rows.js';
-import { writeRows } from './sheet.js';
+import { setPlaceNotes, writeRows } from './sheet.js';
 import type { Env, ParseResult, PipelineParams, PipelineResult, PlaceMatch, Post } from './types.js';
 
 // Vercel Hobby stops functions at 300s. Give up early enough to still write the failure row.
@@ -135,6 +136,16 @@ async function runSteps(
   ]);
   const written = await writeRows(env, url, rows);
   if (written.duplicate) return { ok: true, message: 'Already saved' };
+
+  // A place saved before now has two posts' notes on what to order; say them once. Only logged on failure.
+  if (written.merged_places?.length && !state.abandoned) {
+    try {
+      const combined = await combinePlaceNotes(env, written.merged_places);
+      if (combined.length) await setPlaceNotes(env, combined);
+    } catch (err) {
+      log(url, `could not combine place notes: ${errorMessage(err)}`);
+    }
+  }
 
   // 5. Fold new ideas into their guides. The save already worked, so a failure here is only logged.
   const guides = [...new Set(result.items.map((item) => item.idea?.guide ?? '').filter(Boolean))];
