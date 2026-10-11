@@ -51,10 +51,12 @@ const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'h
   'books & stationery', 'market', 'museum & gallery', 'sight', 'activity', 'stay'];
 
 // Instagram/TikTok image links expire within days, so thumbnails are copied to Drive.
-const THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
+const THUMBNAIL_FOLDER = 'Save Faves thumbnails';
+// The folder's name from before the rename; found and renamed the first time a thumbnail is saved.
+const OLD_THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
 // Bump when this file changes, so a check of the web app shows which code is deployed.
-const SCRIPT_VERSION = 6;
+const SCRIPT_VERSION = 7;
 
 function doGet() {
   return json_({ ok: true, service: 'save-faves sheet', version: SCRIPT_VERSION });
@@ -852,12 +854,20 @@ function readList_(tabName, header, defaults, note) {
     .filter(function (t) { return t; });
 }
 
+/** The thumbnails folder: "Save Faves thumbnails", the old "Reel Saver thumbnails" renamed, or a new one. */
+function thumbnailFolder_() {
+  const current = DriveApp.getFoldersByName(THUMBNAIL_FOLDER);
+  if (current.hasNext()) return current.next();
+  const old = DriveApp.getFoldersByName(OLD_THUMBNAIL_FOLDER);
+  if (old.hasNext()) return old.next().setName(THUMBNAIL_FOLDER);
+  return DriveApp.createFolder(THUMBNAIL_FOLDER);
+}
+
 function saveThumbnail_(url) {
   try {
     const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
     if (res.getResponseCode() !== 200) return url;
-    const folders = DriveApp.getFoldersByName(THUMBNAIL_FOLDER);
-    const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(THUMBNAIL_FOLDER);
+    const folder = thumbnailFolder_();
     const file = folder.createFile(res.getBlob().setName('thumb-' + Date.now() + '.jpg'));
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w600';
