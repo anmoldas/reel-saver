@@ -21,6 +21,8 @@ export interface PipelineParams {
   savedAt: string; // ISO timestamp of the share
   lists: Lists; // idea topics and place types, from the sheet's tabs
   note?: string; // goes in the notes column, e.g. the collection an import came from
+  /** Imports skip updating the Guides tab on every save; scripts/build-guides.mjs --rebuild does it once after. */
+  skipGuides?: boolean;
 }
 
 export interface PipelineResult {
@@ -49,7 +51,7 @@ export interface ParsedItem {
   confidence: number;
   recipe: { ingredients: string[]; steps: string[]; servings: string; time: string } | null;
   place: { name: string; city: string; country: string; category: string; specialty: string; what_to_order: string } | null;
-  idea: { topic: string; suggested_topic: string; takeaways: string[]; mentioned: Mention[] } | null;
+  idea: { topic: string; suggested_topic: string; guide: string; takeaways: string[]; mentioned: Mention[] } | null;
 }
 
 /** A product, app, brand, store, book, etc. named in a post. Each becomes a row in the Mentions tab. */

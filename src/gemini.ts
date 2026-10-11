@@ -1,4 +1,4 @@
-import { DEFAULT_PLACE_TYPES, MENTION_KINDS, OTHER, OTHER_PLACE, type Lists } from './topics.js';
+import { DEFAULT_PLACE_TYPES, GUIDE_NAMING, MENTION_KINDS, OTHER, OTHER_PLACE, matchGuide, type Lists } from './topics.js';
 import { errorMessage, withRetry } from './errors.js';
 import type { Env, ItemType, Mention, ParsedItem, ParseResult, Post } from './types.js';
 
@@ -46,6 +46,7 @@ export function responseSchema({ topics, placeTypes }: Lists) {
               properties: {
                 topic: { type: 'STRING', enum: topics },
                 suggested_topic: STR,
+                guide: STR,
                 takeaways: STR_LIST,
                 mentioned: {
                   type: 'ARRAY',
@@ -62,7 +63,7 @@ export function responseSchema({ topics, placeTypes }: Lists) {
                   },
                 },
               },
-              required: ['topic', 'suggested_topic', 'takeaways', 'mentioned'],
+              required: ['topic', 'suggested_topic', 'guide', 'takeaways', 'mentioned'],
             },
           },
           required: ['type', 'title', 'summary', 'confidence'],
@@ -76,7 +77,7 @@ export function responseSchema({ topics, placeTypes }: Lists) {
   };
 }
 
-export function instructions({ topics, placeTypes }: Lists): string {
+export function instructions({ topics, placeTypes, guides }: Lists): string {
   return `You turn a saved social media post into structured notes.
 
 Classify what the post is worth saving for:
@@ -89,6 +90,8 @@ Classify what the post is worth saving for:
 - "idea": everything else worth remembering: advice, tips, how-tos, products, outfits, tools. Fill "idea" with:
   - "topic": one of ${topics.map((t) => `"${t}"`).join(', ')}. Travel advice without specific named spots is "Travel tips".
   - "suggested_topic": only when the topic is "${OTHER}", a short name for the topic it would need (e.g. "Fitness"); otherwise empty.
+  - "guide": ${GUIDE_NAMING}
+    ${guides.length ? `Use one of the guides that already exist when it fits: ${guides.map((g) => `"${g}"`).join(', ')}. Otherwise name a new one.` : 'Name a new one.'}
   - "takeaways": the 3 to 5 most useful points the post actually makes, each a short standalone sentence.
   - "mentioned": the specific products, apps, tools, brands, stores, books, shows, courses or people the post recommends, reviews or shows how to use: things the viewer could buy, use, watch, read or follow. Leave out:
     - names that are only part of the creator's story or background, such as their employers, schools, clients or cities they lived in;
@@ -259,7 +262,7 @@ function mentions(v: unknown): Mention[] {
 
 export function normalizeParse(
   raw: any,
-  { topics, placeTypes }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE] },
+  { topics, placeTypes, guides }: Lists = { topics: [OTHER], placeTypes: [...DEFAULT_PLACE_TYPES, OTHER_PLACE], guides: [] },
 ): ParseResult {
   const items: ParsedItem[] = (Array.isArray(raw?.items) ? raw.items : []).flatMap((it: any): ParsedItem[] => {
     const type = TYPES.includes(it?.type) ? (it.type as ItemType) : 'idea';
@@ -296,6 +299,7 @@ export function normalizeParse(
       item.idea = {
         topic,
         suggested_topic: topic === OTHER ? s(r.suggested_topic) || invented : '',
+        guide: matchGuide(s(r.guide), guides),
         takeaways: list(r.takeaways),
         mentioned: mentions(r.mentioned),
       };

@@ -123,6 +123,7 @@ Finish with a short tour in plain words:
 
 - **Places, Recipes, Ideas** tabs. Each row has a **done** checkbox and a **notes** column that are theirs.
 - **Mentions**: every product, app, brand or book an idea recommends, with a shopping link, a want / bought / tried / skip dropdown, and how many saves mention it.
+- **Guides**: ideas on the same subject (a trip like "Japan", or a skill like "Video editing") share a guide, and once a guide has two videos it gets one row here with all their takeaways combined, without repeats.
 - **Topics** and **Place types** tabs: these are the lists Gemini sorts into. Encourage them to replace the starter topics with their own interests (e.g. Fitness, Skincare, Home). Adding a row is all it takes; no code. Ideas that fit nothing land in **Other** with a **suggested_topic**, which shows which topics to add.
 - **Failed** tab: anything that couldn't be saved, with the reason. Sharing the same link again retries it.
 - Sharing the same post twice says "Already saved".
@@ -148,6 +149,7 @@ Then:
 3. Pick a batch together. From the preview count, say how long it will take and roughly what share of the $5 it uses. Keep about $1 back for everyday saves: at most about **400 TikToks or 1,300 Instagram posts in a month**, fewer if Apify already shows usage this month (apify.com → **Billing**). Suggest the newest first with `--since` (e.g. `--since 2025-01-01`), a batch size with `--limit`, and a quick `--limit 10` test they look at in the sheet before the big run. If they have more than one month's worth, tell them to do the rest next month with the same command.
 4. Keep the computer awake while it runs: on a Mac put `caffeinate -i` in front of the command; on Windows have them set **Settings → System → Power → Sleep** to **Never** for now (and set it back afterwards).
 5. Run it with `--url https://<their-app>.vercel.app`, the agreed `--since` / `--limit`, and without `--dry-run`. Run it in the background so it isn't cut off by a command time limit, and check on it now and then. It sends one at a time, newest first, keeps the date they saved each one, skips deleted posts and just-for-fun ones, and stops by itself on errors like running out of Apify credit. When it ends, tell them how many were saved, skipped and failed, and what's left for next time.
+6. Imports don't update the **Guides** tab after every save. When it's finished, run `node scripts/build-guides.mjs --url https://<their-app>.vercel.app --rebuild` once (a few Gemini calls, no Apify cost).
 
 ---
 

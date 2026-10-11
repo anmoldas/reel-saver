@@ -5,3 +5,4 @@ node_modules
 .tiktok-import.json
 .import-progress.json
 .mentions-cleanup-plan.json
+.guides-plan.json

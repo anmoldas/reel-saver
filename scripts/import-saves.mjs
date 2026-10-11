@@ -176,7 +176,7 @@ async function main() {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: f.link, secret, saved_at: f.savedAt, note: f.note, wait: true }),
+        body: JSON.stringify({ url: f.link, secret, saved_at: f.savedAt, note: f.note, wait: true, guides: false }),
       });
       result = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }));
       if (res.status === 401) die('The app rejected the SECRET. Check it matches the one in Vercel.');
@@ -200,6 +200,7 @@ async function main() {
   if (stopReason) console.log(`Stopped: ${stopReason}`);
   console.log(`Done: ${counts.saved} sent, ${counts.duplicate} already saved, ${counts.skipped} skipped as just for fun, ${counts.failed} failed.`);
   if (counts.failed) console.log('Run the same command again to retry the failed ones.');
+  if (counts.saved) console.log(`To fold the new ideas into the Guides tab: node scripts/build-guides.mjs --url ${opts.url} --rebuild`);
 }
 
 main();

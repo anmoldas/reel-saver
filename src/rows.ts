@@ -55,6 +55,7 @@ export function itemRow(base: Base, item: ParsedItem, match: PlaceMatch | null =
     const d = item.idea;
     row.topic = d.topic;
     row.suggested_topic = d.suggested_topic;
+    row.guide = d.guide;
     row.takeaways = bullets(d.takeaways);
     row.mentioned = d.mentioned.map((m) => m.name).join(', ');
   }
