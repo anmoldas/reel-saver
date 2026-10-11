@@ -61,7 +61,7 @@ so roughly 500 tiktoks or 1,500 instagram posts a month before Apify's free cred
 - **posts with nothing to keep are skipped.** jokes, memes, skits, pets and vlogs with nothing to visit, cook, buy or learn get "Skipped: nothing worth saving" and no row. so do creators asking their followers for suggestions, giveaways, promos that only plug the creator's own book or show, and news that will soon be out of date. if the caption can't tell, it watches the video first. a post that still names a place, product or tip of its own is saved.
 - **a recipe isn't saved twice.** a recipe post becomes a Recipes row; it only gets an Ideas row as well when it gives separate advice the recipe doesn't hold.
 - **duplicates**: share links are cleaned up first (`instagram.com/share/...`, `vm.tiktok.com/...` and `?igsh=` all point to the same post), so sharing a post twice says "Already saved: X" and nothing runs. failed saves are the exception: sharing again retries them.
-- **thumbnails** are copied to a `Save Faves thumbnails` folder in your Drive (an older `Reel Saver thumbnails` folder is renamed to that), because instagram and tiktok image links expire within days.
+- **thumbnails** are copied to a `Save Faves thumbnails` folder in your Drive, because instagram and tiktok image links expire within days.
 
 ## the sheet
 
@@ -83,7 +83,7 @@ one tab per kind of save, newest at the top. every save re-sorts its tab by `sav
 - `takeaways` are the 3–5 useful points the video makes; `mentioned` lists the tools, apps, products or brands it recommends (not ones that are just part of the creator's story, like their employers).
 - `done` is a checkbox; `notes` is yours. the script never writes either after the row is created.
 
-made your sheet with an older version? [UPGRADING.md](UPGRADING.md) has the one-time fixes. a new sheet doesn't need them.
+the one-time fixes for sheets made before Places, Mentions and Guides existed are in the [`v1-upgrades`](https://github.com/moneymolz/save-faves/tree/v1-upgrades) tag. a new sheet doesn't need them.
 
 ### mentions
 

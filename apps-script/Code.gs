@@ -52,11 +52,9 @@ const DEFAULT_PLACE_TYPES = ['restaurant', 'cafe', 'bar', 'bakery & dessert', 'h
 
 // Instagram/TikTok image links expire within days, so thumbnails are copied to Drive.
 const THUMBNAIL_FOLDER = 'Save Faves thumbnails';
-// The folder's name from before the rename; found and renamed the first time a thumbnail is saved.
-const OLD_THUMBNAIL_FOLDER = 'Reel Saver thumbnails';
 
 // Bump when this file changes, so a check of the web app shows which code is deployed.
-const SCRIPT_VERSION = 7;
+const SCRIPT_VERSION = 8;
 
 function doGet() {
   return json_({ ok: true, service: 'save-faves sheet', version: SCRIPT_VERSION });
@@ -77,15 +75,11 @@ function doPost(e) {
   try {
     if (body.action === 'check') return json_(check_(body.source_url));
     if (body.action === 'write') return json_(write_(body.source_url, body.rows || []));
-    if (body.action === 'mentions') return json_(readMentions_());
-    if (body.action === 'cleanMentions') return json_(cleanMentions_(body));
     if (body.action === 'ideas') return json_(readIdeas_());
     if (body.action === 'assignGuides') return json_(assignGuides_(body.assignments || []));
     if (body.action === 'guideVideos') return json_({ ok: true, videos: guideVideos_(body.guide) });
     if (body.action === 'writeGuide') return json_(writeGuide_(body));
     if (body.action === 'failed') return json_(readFailed_());
-    if (body.action === 'tidy') return json_(tidy_(body));
-    if (body.action === 'placeNotes') return json_(readPlaceNotes_());
     if (body.action === 'setPlaceNotes') return json_(setPlaceNotes_(body.updates || []));
     return json_({ ok: false, error: 'Unknown action: ' + body.action });
   } catch (err) {
@@ -234,6 +228,9 @@ function mergePlaces_(rows, prepareNew, mergedNotes) {
   return Object.keys(changed).length + append_('place', fresh);
 }
 
+// What the model sometimes writes instead of leaving a field empty; never counted as a city.
+const PLACEHOLDER_ = /^(not (specified|mentioned|stated|provided|given|available)|unknown|various|n\/?a|none|tbd|-+|—)\.?$/i;
+
 /** The cities in the Places tab, most places first, each spelled the way most rows spell it. */
 function cityNames_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.place.name);
@@ -255,120 +252,6 @@ function cityNames_() {
     .map(function (key) {
       return Object.keys(spellings[key]).sort(function (a, b) { return spellings[key][b] - spellings[key][a]; })[0];
     });
-}
-
-// ---- One-time tidy (scripts/tidy-sheet.mjs drives it) ----
-
-const PLACES_BACKUP = 'Places (backup)';
-// What the model wrote instead of leaving a field empty, before the parser cleared these itself.
-const PLACEHOLDER_ = /^(not (specified|mentioned|stated|provided|given|available)|unknown|various|n\/?a|none|tbd|-+|—)\.?$/i;
-const PLACEHOLDER_COLUMNS = {
-  place: ['category', 'specialty', 'city', 'country', 'address', 'what_to_order'],
-  recipe: ['time', 'servings'],
-};
-const COUNTRY_NAMES = {
-  'united states': 'USA', 'united states of america': 'USA', 'us': 'USA', 'u.s.': 'USA', 'u.s.a.': 'USA',
-  'united kingdom': 'UK', 'great britain': 'UK', 'u.k.': 'UK',
-};
-
-/** Blanks placeholder cells in the given columns of row objects. Returns how many. */
-function clearPlaceholders_(rows, columns) {
-  let n = 0;
-  rows.forEach(function (r) {
-    columns.forEach(function (c) {
-      if (typeof r[c] === 'string' && PLACEHOLDER_.test(r[c].trim())) { r[c] = ''; n++; }
-    });
-  });
-  return n;
-}
-
-/**
- * Merges places saved more than once into one row each, blanks "Not specified"-style cells in Places and
- * Recipes, and writes "United States" and the like the way the rest of the sheet does ("USA").
- * { count, dry_run }: count is the Places row count from the preview; a different count means the tab
- * changed since, and nothing is done. Backs Places up to "Places (backup)" first.
- */
-function tidy_(body) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(TABS.place.name);
-  const header = sheet ? header_(sheet, TABS.place.columns) : [];
-  const data = sheet && sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues() : [];
-  if (!body.dry_run && Number(body.count) !== data.length) {
-    return { ok: false, error: 'The Places tab changed since the preview (' + data.length + ' rows, expected ' + body.count + '). Run the preview again.' };
-  }
-  const rows = data.map(function (v) { return rowObject_(header, v); });
-  let placeholders = clearPlaceholders_(rows, PLACEHOLDER_COLUMNS.place);
-  let countries = 0;
-  rows.forEach(function (r) {
-    const name = COUNTRY_NAMES[String(r.country || '').trim().toLowerCase()];
-    if (name) { r.country = name; countries++; }
-  });
-
-  // Oldest first, so each merged row keeps its first save's date, wording and thumbnail.
-  const groups = [];
-  rows.slice().sort(function (a, b) { return new Date(a.saved_at) - new Date(b.saved_at); }).forEach(function (r) {
-    let g = null;
-    for (let k = 0; k < groups.length && !g; k++) if (samePlace_(placeKey_(groups[k].row), placeKey_(r))) g = groups[k];
-    if (!g) {
-      const row = Object.assign({}, r);
-      row.times_saved = lines_(row.source_url).length || 1;
-      groups.push({ row: row, merged: 1, notes: r.notes ? [String(r.notes)] : [] });
-      return;
-    }
-    g.merged++;
-    addPlaceSave_(g.row, r);
-    if (r.done === true) g.row.done = true;
-    if (r.notes && g.notes.indexOf(String(r.notes)) === -1) g.notes.push(String(r.notes));
-  });
-  const merged = groups.filter(function (g) { return g.merged > 1; }).map(function (g) {
-    return g.row.title + (g.row.city ? ' (' + g.row.city + ')' : '') + ': ' + g.merged + ' rows';
-  });
-
-  const recipes = ss.getSheetByName(TABS.recipe.name);
-  const recipeHeader = recipes ? header_(recipes, TABS.recipe.columns) : [];
-  const recipeData = recipes && recipes.getLastRow() >= 2 ? recipes.getRange(2, 1, recipes.getLastRow() - 1, recipeHeader.length).getValues() : [];
-  const recipeRows = recipeData.map(function (v) { return rowObject_(recipeHeader, v); });
-  const recipePlaceholders = clearPlaceholders_(recipeRows, PLACEHOLDER_COLUMNS.recipe);
-  placeholders += recipePlaceholders;
-
-  const result = {
-    ok: true, count: data.length, before: data.length, after: groups.length, merged: merged,
-    placeholders: placeholders, countries: countries,
-  };
-  if (body.dry_run) return result;
-
-  if (data.length) {
-    const old = ss.getSheetByName(PLACES_BACKUP);
-    if (old) ss.deleteSheet(old);
-    sheet.copyTo(ss).setName(PLACES_BACKUP);
-    const out = groups.map(function (g) {
-      g.row.notes = g.notes.join('\n');
-      return header.map(function (c) { return cell_(c, g.row[c]); });
-    });
-    sheet.getRange(2, 1, data.length, header.length).clearContent().clearDataValidations();
-    sheet.getRange(2, 1, out.length, header.length).setValues(out);
-    const doneCol = header.indexOf('done');
-    if (doneCol !== -1) sheet.getRange(2, doneCol + 1, out.length, 1).insertCheckboxes();
-    sortNewestFirst_(sheet);
-  }
-  if (recipePlaceholders) {
-    recipes.getRange(2, 1, recipeRows.length, recipeHeader.length)
-      .setValues(recipeRows.map(function (r) { return recipeHeader.map(function (c) { return cell_(c, r[c]); }); }));
-  }
-  return result;
-}
-
-/** Places whose what_to_order joins several notes ("a; b"), for rewriting into one line. */
-function readPlaceNotes_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.place.name);
-  if (!sheet || sheet.getLastRow() < 2) return { ok: true, places: [] };
-  const header = header_(sheet, TABS.place.columns);
-  return {
-    ok: true,
-    places: sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues()
-      .map(function (v) { return placeNote_(rowObject_(header, v)); })
-      .filter(function (n) { return n.what_to_order.indexOf(';') !== -1; }),
-  };
 }
 
 /** Sets what_to_order on the rows with this first link and title: [{ source_url, title, what_to_order }]. */
@@ -526,121 +409,6 @@ function detachMentions_(sourceUrl) {
     row.times_mentioned = urls.length - 1;
     sheet.getRange(i + 2, 1, 1, header.length).setValues([header.map(function (c) { return cell_(c, row[c]); })]);
   }
-}
-
-// ---- One-time Mentions cleanup (scripts/clean-mentions.mjs drives it) ----
-
-const MENTIONS_BACKUP = 'Mentions (backup)';
-
-/** Every Mentions row with its row number, for review. */
-function readMentions_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TABS.mention.name);
-  if (!sheet || sheet.getLastRow() < 2) return { ok: true, count: 0, rows: [] };
-  const header = header_(sheet, TABS.mention.columns);
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
-  return {
-    ok: true,
-    count: data.length,
-    rows: data.map(function (values, i) {
-      const r = rowObject_(header, values);
-      return { row: i + 2, name: r.name, kind: r.kind, brand: r.brand, why: r.why, topic: r.topic, from: r.from };
-    }),
-  };
-}
-
-/**
- * Applies a reviewed plan: { count, remove: [row numbers], updates: [{ row, kind, shop_link }], dry_run }.
- * Backs the tab up first, then drops and fixes rows and merges duplicates into one row each.
- * Refuses if the tab has a different number of rows than when it was read.
- */
-function cleanMentions_(body) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(TABS.mention.name);
-  if (!sheet || sheet.getLastRow() < 2) return { ok: true, before: 0, removed: 0, after: 0, merged: [] };
-  const header = header_(sheet, TABS.mention.columns);
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
-  if (Number(body.count) !== data.length) {
-    return { ok: false, error: 'The Mentions tab changed since it was reviewed (' + data.length + ' rows, expected ' + body.count + '). Run the preview again.' };
-  }
-  const remove = {};
-  (body.remove || []).forEach(function (n) { remove[Number(n)] = true; });
-  (body.updates || []).forEach(function (u) {
-    const i = Number(u.row) - 2;
-    if (!data[i]) return;
-    if (u.kind) data[i][header.indexOf('kind')] = u.kind;
-    if (u.shop_link) data[i][header.indexOf('shop_link')] = u.shop_link;
-  });
-  const kept = data.filter(function (_, i) { return !remove[i + 2]; }).map(function (v) { return rowObject_(header, v); });
-  const grouped = groupMentions_(kept);
-  const result = {
-    ok: true,
-    before: data.length,
-    removed: data.length - kept.length,
-    after: grouped.length,
-    merged: grouped.filter(function (r) { return r._merged > 1; }).map(function (r) { return r.name + ' (' + r._merged + ' rows)'; }),
-  };
-  if (body.dry_run) return result;
-
-  const old = ss.getSheetByName(MENTIONS_BACKUP);
-  if (old) ss.deleteSheet(old);
-  sheet.copyTo(ss).setName(MENTIONS_BACKUP);
-
-  sheet.getRange(2, 1, data.length, header.length).clearContent().clearDataValidations();
-  if (grouped.length) {
-    sheet.getRange(2, 1, grouped.length, header.length)
-      .setValues(grouped.map(function (r) { return header.map(function (c) { return cell_(c, r[c]); }); }));
-    const statusCol = header.indexOf('status');
-    if (statusCol !== -1) {
-      const rule = SpreadsheetApp.newDataValidation().requireValueInList(MENTION_STATUSES, true).build();
-      sheet.getRange(2, statusCol + 1, grouped.length, 1).setDataValidation(rule);
-    }
-    sortNewestFirst_(sheet);
-  }
-  return result;
-}
-
-/**
- * Folds rows that name the same thing into one: every save listed once, the earliest date, the first
- * wording, a status you changed from "want" kept, and all your notes kept.
- */
-function groupMentions_(rows) {
-  const groups = [];
-  rows.forEach(function (r) {
-    const key = mentionKeys_(r.name, r.brand);
-    const urls = lines_(r.source_url);
-    const lists = {};
-    MENTION_LISTS.forEach(function (c) { lists[c] = c === 'source_url' ? urls : listOf_(r[c], urls.length); });
-    let g = null;
-    for (let k = 0; k < groups.length && !g; k++) if (sameMention_(groups[k].key, key)) g = groups[k];
-    if (!g) {
-      groups.push({ key: key, row: Object.assign({}, r, { _merged: 1 }), lists: lists, notes: r.notes ? [String(r.notes)] : [] });
-      return;
-    }
-    const t = g.row;
-    t._merged++;
-    lists.source_url.forEach(function (u, i) {
-      if (g.lists.source_url.indexOf(u) !== -1) return;
-      MENTION_LISTS.forEach(function (c) { g.lists[c].push(lists[c][i]); });
-    });
-    ['kind', 'brand', 'why', 'price', 'topic', 'shop_link'].forEach(function (c) { if (!t[c] && r[c]) t[c] = r[c]; });
-    if ((!t.status || t.status === 'want') && r.status && r.status !== 'want') t.status = r.status;
-    if (r.saved_at && (!t.saved_at || new Date(r.saved_at) < new Date(t.saved_at))) t.saved_at = r.saved_at;
-    if (r.notes && g.notes.indexOf(String(r.notes)) === -1) g.notes.push(String(r.notes));
-  });
-  return groups.map(function (g) {
-    const r = g.row;
-    MENTION_LISTS.forEach(function (c) { r[c] = g.lists[c].join('\n'); });
-    r.times_mentioned = g.lists.source_url.length || 1;
-    r.notes = g.notes.join('\n');
-    return r;
-  });
-}
-
-/** Run from the editor to merge duplicate Mentions rows without the review. Backs the tab up first. */
-function mergeDuplicateMentions() {
-  const read = readMentions_();
-  const result = cleanMentions_({ count: read.count });
-  Logger.log(JSON.stringify(result));
 }
 
 // ---- Guides: ideas on the same subject, combined into one row ----
@@ -854,13 +622,10 @@ function readList_(tabName, header, defaults, note) {
     .filter(function (t) { return t; });
 }
 
-/** The thumbnails folder: "Save Faves thumbnails", the old "Reel Saver thumbnails" renamed, or a new one. */
+/** The "Save Faves thumbnails" folder, made the first time a thumbnail is saved. */
 function thumbnailFolder_() {
   const current = DriveApp.getFoldersByName(THUMBNAIL_FOLDER);
-  if (current.hasNext()) return current.next();
-  const old = DriveApp.getFoldersByName(OLD_THUMBNAIL_FOLDER);
-  if (old.hasNext()) return old.next().setName(THUMBNAIL_FOLDER);
-  return DriveApp.createFolder(THUMBNAIL_FOLDER);
+  return current.hasNext() ? current.next() : DriveApp.createFolder(THUMBNAIL_FOLDER);
 }
 
 function saveThumbnail_(url) {
@@ -880,144 +645,6 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/** "1-2-3 Shibuya, Tokyo 150-0002, Japan" → "Japan". */
-function countryFromAddress_(address) {
-  const last = String(address || '').split(',').pop().trim();
-  return /\d/.test(last) ? '' : last;
-}
-
-/**
- * One-time move from the old single "Saves" tab into Places / Recipes / Ideas / Failed.
- * Run it once from the editor. The old tab is kept, renamed to "Saves (old)".
- */
-function migrateSaves() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const old = ss.getSheetByName('Saves');
-  if (!old || old.getLastRow() < 2) {
-    Logger.log('No "Saves" tab with rows to move.');
-    return;
-  }
-  const values = old.getDataRange().getValues();
-  const header = values[0].map(String);
-  const byType = { place: [], recipe: [], idea: [], failed: [] };
-  values.slice(1).forEach(function (cells) {
-    const r = {};
-    header.forEach(function (h, i) { r[h] = cells[i]; });
-    if (!r.source_url) return;
-    const base = {
-      saved_at: r.saved_at, title: r.title, summary: r.summary, source_url: r.source_url,
-      creator: r.creator, thumbnail_url: r.thumbnail_url, notes: r.notes, done: r.status === 'done',
-    };
-    if (r.type === 'place') {
-      byType.place.push(Object.assign(base, {
-        category: r.category, city: r.place_city, country: countryFromAddress_(r.place_address),
-        address: r.place_address, what_to_order: String(r.details || '').replace(/^Order:\s*/, ''),
-        maps_url: r.maps_url, lat: r.lat, lng: r.lng, place_id: r.place_id,
-      }));
-    } else if (r.type === 'recipe') {
-      byType.recipe.push(Object.assign(base, { ingredients: r.recipe_ingredients, steps: r.recipe_steps, time: r.details }));
-    } else if (r.type === 'failed') {
-      byType.failed.push({ saved_at: r.saved_at, source_url: r.source_url, error: r.summary, creator: r.creator });
-    } else {
-      byType.idea.push(Object.assign(base, { topic: 'Other', suggested_topic: r.category, takeaways: r.details }));
-    }
-  });
-  Object.keys(byType).forEach(function (type) { append_(type, byType[type]); });
-  old.setName('Saves (old)');
-  readTopics_();
-  Logger.log('Moved: ' + Object.keys(byType).map(function (t) { return t + ' ' + byType[t].length; }).join(', '));
-}
-
-// Keyword guesses for recategorizePlaces(), checked in order against the old category and the title.
-const PLACE_TYPE_KEYWORDS = [
-  ['home & ceramics', /ceramic|pottery|glass|home|decor|interior|furniture|homeware|kitchenware|candle/],
-  ['bakery & dessert', /bakery|bake|dessert|pastr|ice cream|gelato|donut|doughnut|cake|chocolate|sweet/],
-  ['cafe', /cafe|café|coffee|\btea\b|matcha|espresso/],
-  ['bar', /\bbar\b|cocktail|wine|pub|brewery|beer|izakaya|speakeasy/],
-  ['clothing', /cloth|boutique|fashion|vintage|thrift|apparel|denim|shoe|jewel/],
-  ['beauty', /beauty|cosmetic|skincare|salon|spa|nail|perfume/],
-  ['books & stationery', /book|stationer|paper|pen shop/],
-  ['market', /market|bazaar|grocery|deli/],
-  ['museum & gallery', /museum|gallery|exhibit|\bart\b/],
-  ['stay', /hotel|hostel|ryokan|inn\b|bnb|resort|stay/],
-  ['sight', /temple|shrine|park|garden|view|landmark|castle|bridge|beach|sight/],
-  ['activity', /class|workshop|tour|activity|hike|onsen|karaoke/],
-  ['restaurant', /restaurant|food|ramen|sushi|pizza|taco|noodle|bistro|diner|eat|bbq|burger|udon|curry/],
-];
-
-/**
- * One-time cleanup: puts older free-text place categories onto the Place types list.
- * The old wording moves to "specialty" so nothing is lost. Run it once from the editor;
- * check the rows it logs as "other" and fix those by hand.
- */
-function recategorizePlaces() {
-  const sheet = sheetFor_('place');
-  const header = header_(sheet, TABS.place.columns);
-  const last = sheet.getLastRow();
-  if (last < 2) return;
-  const types = readPlaceTypes_().map(function (t) { return t.toLowerCase(); });
-  const catCol = header.indexOf('category');
-  const specCol = header.indexOf('specialty');
-  const titleCol = header.indexOf('title');
-  const range = sheet.getRange(2, 1, last - 1, header.length);
-  const values = range.getValues();
-  const unmatched = [];
-  let changed = 0;
-  values.forEach(function (row) {
-    const old = String(row[catCol] || '').trim();
-    if (types.indexOf(old.toLowerCase()) !== -1) return; // already on the list
-    const text = (old + ' ' + row[titleCol]).toLowerCase();
-    const hit = PLACE_TYPE_KEYWORDS.filter(function (k) {
-      return types.indexOf(k[0]) !== -1 && k[1].test(text);
-    })[0];
-    if (old && !row[specCol]) row[specCol] = old;
-    row[catCol] = hit ? hit[0] : 'other';
-    if (!hit) unmatched.push(row[titleCol]);
-    changed++;
-  });
-  range.setValues(values);
-  Logger.log('Updated ' + changed + ' places. Set to "other", check by hand: ' + (unmatched.join(', ') || 'none'));
-}
-
-/**
- * One-time: turns the "mentioned" lists on existing Ideas rows into Mentions rows.
- * Kind, brand, why and price stay empty for these; new saves fill them in. Safe to re-run:
- * ideas that already have Mentions rows are skipped.
- */
-function backfillMentions() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ideas = ss.getSheetByName(TABS.idea.name);
-  if (!ideas || ideas.getLastRow() < 2) {
-    Logger.log('No Ideas rows.');
-    return;
-  }
-  const mentionsSheet = sheetFor_('mention');
-  const mentionUrls = {};
-  if (mentionsSheet.getLastRow() >= 2) {
-    const urlCol = header_(mentionsSheet, TABS.mention.columns).indexOf('source_url') + 1;
-    mentionsSheet.getRange(2, urlCol, mentionsSheet.getLastRow() - 1, 1).getValues()
-      .forEach(function (r) { lines_(r[0]).forEach(function (u) { mentionUrls[u] = true; }); });
-  }
-  const values = ideas.getDataRange().getValues();
-  const header = values[0].map(String);
-  const col = function (name) { return header.indexOf(name); };
-  const rows = [];
-  values.slice(1).forEach(function (r) {
-    const url = r[col('source_url')];
-    const names = String(r[col('mentioned')] || '').split(',').map(function (n) { return n.trim(); }).filter(String);
-    if (!url || !names.length || mentionUrls[url]) return;
-    names.forEach(function (name) {
-      rows.push({
-        saved_at: r[col('saved_at')], status: 'want', name: name, topic: r[col('topic')],
-        shop_link: 'https://www.google.com/search?tbm=shop&q=' + encodeURIComponent(name),
-        from: r[col('title')], creator: r[col('creator')], source_url: url,
-      });
-    });
-  });
-  mergeMentions_(rows);
-  Logger.log('Added ' + rows.length + ' mentions.');
-}
-
 /** Newest saves at the top. Checkboxes and dropdowns move with their rows. */
 function sortNewestFirst_(sheet) {
   const last = sheet.getLastRow();
@@ -1026,16 +653,6 @@ function sortNewestFirst_(sheet) {
   const col = header.indexOf('saved_at');
   if (col === -1) return;
   sheet.getRange(2, 1, last - 1, header.length).sort({ column: col + 1, ascending: false });
-}
-
-/** Run once from the editor to sort the tabs you already have; new saves keep them sorted. */
-function sortAllTabs() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  Object.keys(TABS).forEach(function (type) {
-    const sheet = ss.getSheetByName(TABS[type].name);
-    if (sheet) sortNewestFirst_(sheet);
-  });
-  Logger.log('Sorted newest first.');
 }
 
 /**
@@ -1091,7 +708,7 @@ function applyNewTopics_() {
   return { ideas: ideasMoved, mentions: mentionsMoved };
 }
 
-/** Build step 1: run this from the editor to check the sheet with a hand-written row. */
+/** Setup: run this from the editor to check the sheet with a hand-written row. */
 function testWrite() {
   const result = write_('https://www.instagram.com/reel/TEST123/', [{
     type: 'place',
